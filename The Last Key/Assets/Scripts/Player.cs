@@ -1,40 +1,85 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
-public class Player : MonoBehaviour
+public class PlayerMovement2D : MonoBehaviour
 {
-    // Move in A and D
-    // Space for jump
-    // Left click for attack --> Push other player
-    // If pushed & has key speed increases for 5 seconds
+    [Header("Movimiento")]
+    [SerializeField] private float velocidadMovimiento = 8f;
+    [SerializeField] private float suavizadoMovimiento = 0.1f;
 
-    [SerializeField] private float moveSpeed = 5f;
+    [Header("Salto")]
+    [SerializeField] private float fuerzaSalto = 12f;
+    [SerializeField] private float gravedadCaida = 2.5f;
+    [SerializeField] private float gravedadBajaSalto = 2f;
+    [SerializeField] private Transform groundCheck;
+    [SerializeField] private float groundCheckRadius = 0.2f;
+    [SerializeField] private LayerMask groundLayer;
+
     private Rigidbody2D rb;
+    private float movimientoHorizontal;
+    private Vector2 velocidadActual;
+    private bool enSuelo;
 
-    private void Start()
+    void Start()
     {
         rb = GetComponent<Rigidbody2D>();
     }
 
     void Update()
     {
-        float moveInput = 0f;
+        // Input de movimiento usando el nuevo Input System
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard != null)
+        {
+            movimientoHorizontal = 0f;
 
-        if (Input.GetKey(KeyCode.A))
-        {
-            moveInput = -1f ;
-        }
-        else if (Input.GetKey(KeyCode.D))
-        {
-            moveInput = 1f;
-        }
+            if (keyboard.aKey.isPressed)
+                movimientoHorizontal = -1f;
+            else if (keyboard.dKey.isPressed)
+                movimientoHorizontal = 1f;
 
-        if (rb != null)
-        {
-            rb.linearVelocity = new Vector2(moveInput * moveSpeed, rb.linearVelocity.y);
+            // Check si está en el suelo
+            enSuelo = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
+
+            // Input de salto
+            if (keyboard.spaceKey.wasPressedThisFrame && enSuelo)
+            {
+                rb.linearVelocity = new Vector2(rb.linearVelocity.x, fuerzaSalto);
+            }
+
+            // Mejor gravedad para un salto más realista
+            if (rb.linearVelocity.y < 0)
+            {
+                // Cae más rápido
+                rb.linearVelocity += Vector2.up * Physics2D.gravity.y * (gravedadCaida - 1) * Time.deltaTime;
+            }
+            else if (rb.linearVelocity.y > 0 && !keyboard.spaceKey.isPressed)
+            {
+                // Si suelta el botón de salto, cae más rápido (salto variable)
+                rb.linearVelocity += Vector2.up * Physics2D.gravity.y * (gravedadBajaSalto - 1) * Time.deltaTime;
+            }
         }
-        else
+    }
+
+    void FixedUpdate()
+    {
+        // Movimiento horizontal suavizado
+        float velocidadObjetivo = movimientoHorizontal * velocidadMovimiento;
+        rb.linearVelocity = Vector2.SmoothDamp(
+            rb.linearVelocity,
+            new Vector2(velocidadObjetivo, rb.linearVelocity.y),
+            ref velocidadActual,
+            suavizadoMovimiento
+        );
+    }
+
+    void OnDrawGizmosSelected()
+    {
+        // Visualizar el groundCheck en el editor
+        if (groundCheck != null)
         {
-            transform.position += new Vector3(moveInput * moveSpeed * Time.deltaTime, 0, 0);
+            Gizmos.color = Color.red;
+            Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);
         }
     }
 }
