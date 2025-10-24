@@ -1,0 +1,308 @@
+# 🎮 Guía de Configuración - Sistema Multijugador LAN 2D
+
+## 📋 Paso 1: Preparar Scripts
+
+### Reemplazar scripts existentes:
+1. **UDPServer.cs** - Reemplaza con la versión actualizada
+2. **UDPClient.cs** - Reemplaza con la versión actualizada
+
+### Añadir nuevos scripts:
+3. **GameManager.cs** - Gestor principal del juego
+4. **NetworkPlayer.cs** - Sincronización de jugadores
+5. **GameSaveSystem.cs** - Sistema de guardado JSON
+6. **GameUIController.cs** - Interfaz de guardado/cargado
+
+---
+
+## 🎯 Paso 2: Configurar la Escena del Juego (GameScene)
+
+### A. Crear GameObject: "GameManager"
+```
+1. Crear Empty GameObject llamado "GameManager"
+2. Añadir script: GameManager.cs
+3. Configurar en el Inspector:
+   - Player1 Prefab: [Tu prefab del jugador 1]
+   - Player2 Prefab: [Tu prefab del jugador 2]
+```
+
+### B. Crear Spawn Points
+```
+1. Crear Empty GameObject: "Player1SpawnPoint"
+   - Position: (-2, 0, 0) o donde quieras que aparezca Player1
+   
+2. Crear Empty GameObject: "Player2SpawnPoint"
+   - Position: (2, 0, 0) o donde quieras que aparezca Player2
+```
+
+### C. Asignar Spawn Points al GameManager
+```
+En el Inspector del GameManager:
+- Player1 Spawn Point: [Arrastra Player1SpawnPoint aquí]
+- Player2 Spawn Point: [Arrastra Player2SpawnPoint aquí]
+```
+
+---
+
+## 🎨 Paso 3: Preparar los Prefabs de Jugadores
+
+### Configuración de cada Prefab:
+
+**Componentes necesarios:**
+- `Transform` (posición, rotación, escala)
+- `Rigidbody2D` (física)
+- `Collider2D` (colisiones)
+- `SpriteRenderer` (gráfico)
+- `PlayerMovement2D` (tu script existente)
+- Un objeto hijo con Transform para `groundCheck`
+
+**IMPORTANTE:** 
+- Los prefabs NO deben tener el componente `NetworkPlayer` añadido manualmente
+- El GameManager lo añadirá automáticamente al instanciarlos
+- Asegúrate de que el prefab tiene configurado el groundCheck correctamente
+
+**Diferencia visual entre jugadores:**
+- Player1: Sprite azul/verde
+- Player2: Sprite rojo/naranja
+- O usa sprites diferentes para cada uno
+
+---
+
+## 🖥️ Paso 4: Configurar UI (Opcional pero recomendado)
+
+### Crear Canvas con UI de control:
+
+```
+Canvas (Screen Space - Overlay)
+├── Panel "SaveLoadPanel"
+│   ├── Button "SaveButton" 
+│   │   └── Text: "Guardar (F5)"
+│   ├── Button "LoadButton"
+│   │   └── Text: "Cargar (F9)"
+│   ├── Text "StatusText"
+│   └── Text "PlayerInfoText"
+└── Script: GameUIController.cs
+```
+
+**Configurar GameUIController:**
+- Save Button: [Arrastra el botón SaveButton]
+- Load Button: [Arrastra el botón LoadButton]
+- Status Text: [Arrastra StatusText]
+- Player Info Text: [Arrastra PlayerInfoText]
+
+---
+
+## 🚀 Paso 5: Testing - Cómo Probar
+
+### Setup de Testing:
+
+**Build 1 (SERVER):**
+```
+1. File → Build Settings
+2. Añade todas las escenas:
+   - ClientManager (scene inicial)
+   - WaitingRoom
+   - GameScene
+3. Build en carpeta "Build_Server"
+```
+
+**Build 2 (CLIENT):**
+```
+1. Igual que Build 1
+2. Build en carpeta "Build_Client"
+```
+
+### Proceso de Testing:
+
+**1. Iniciar Servidor:**
+```
+- Ejecuta Build_Server
+- En ClientManager:
+  * IP: 127.0.0.1
+  * Username: Player1
+  * Click "Play"
+```
+
+**2. Iniciar Cliente:**
+```
+- Ejecuta Build_Client
+- En ClientManager:
+  * IP: 127.0.0.1
+  * Username: Player2
+  * Click "Play"
+```
+
+**3. Verificar en GameScene:**
+```
+✅ Ambos jugadores deberían aparecer en la escena
+✅ Player1 controla su personaje con A/D/Space
+✅ Player2 controla su personaje con A/D/Space
+✅ Cada jugador ve al otro moverse en tiempo real
+```
+
+---
+
+## 🎮 Controles y Testing
+
+### Controles del Juego:
+- **A** - Mover izquierda
+- **D** - Mover derecha
+- **Space** - Saltar
+
+### Teclas de Debug:
+- **F5** - Guardar posición de jugadores
+- **F9** - Cargar posición guardada
+
+---
+
+## ⚙️ Configuración Avanzada
+
+### Ajustar velocidad de sincronización:
+
+En `NetworkPlayer.cs`:
+```csharp
+[SerializeField] private float sendRate = 20f; // 20 veces/seg
+[SerializeField] private float interpolationSpeed = 10f; // Suavidad
+```
+
+**Recomendaciones:**
+- **sendRate**: 15-30 (más = más lag, pero más preciso)
+- **interpolationSpeed**: 8-15 (más = menos suave pero más reactivo)
+
+### Auto-guardado:
+
+En `GameSaveSystem.cs`:
+```csharp
+public bool enableAutoSave = true; // Activar auto-guardado
+public float autoSaveInterval = 30f; // Guardar cada 30 segundos
+```
+
+---
+
+## 🐛 Solución de Problemas Comunes
+
+### ❌ "No se ve el otro jugador"
+**Solución:**
+- Verifica que ambos clientes se conectaron (mira logs)
+- Comprueba que los prefabs están asignados en GameManager
+- Asegúrate que los Spawn Points existen en GameScene
+
+### ❌ "El jugador remoto se mueve con lag"
+**Solución:**
+- Aumenta `interpolationSpeed` en NetworkPlayer
+- Reduce `sendRate` si la red está saturada
+
+### ❌ "Los dos jugadores controlan el mismo personaje"
+**Solución:**
+- Verifica que GameManager.localPlayerID está configurado correctamente
+- Comprueba los logs para ver qué Player ID se asignó
+
+### ❌ "Error al guardar JSON"
+**Solución:**
+- Asegúrate que GameSaveSystem está en la escena
+- Verifica que los NetworkPlayer tienen Rigidbody2D
+
+---
+
+## 📊 Logs Importantes
+
+**Logs correctos al conectar:**
+```
+User joined: Player1 as Player 1
+User joined: Player2 as Player 2
+Starting game...
+Sent GAME_START to Player1 with ID 1
+Sent GAME_START to Player2 with ID 2
+```
+
+**Logs correctos en GameScene:**
+```
+Local Player ID set to: 1
+Players initialized. Local: Player1
+Local player configured: Player1
+Remote player configured: Player2
+```
+
+---
+
+## 🎯 Checklist Final
+
+Antes de hacer la Build final, verifica:
+
+- [ ] Todos los scripts están actualizados
+- [ ] GameManager configurado con prefabs y spawn points
+- [ ] Los prefabs tienen PlayerMovement2D y Rigidbody2D
+- [ ] Los prefabs NO tienen NetworkPlayer (se añade automáticamente)
+- [ ] GameScene está en Build Settings
+- [ ] Se distinguen visualmente Player1 y Player2
+- [ ] UI de guardado está configurada (opcional)
+- [ ] Probado en Unity Editor antes de hacer Build
+
+---
+
+## 📝 Notas Adicionales
+
+### Formato de archivo JSON guardado:
+```json
+{
+  "players": [
+    {
+      "playerID": 1,
+      "posX": -2.5,
+      "posY": 1.2,
+      "velX": 0.0,
+      "velY": 0.0
+    },
+    {
+      "playerID": 2,
+      "posX": 3.1,
+      "posY": 0.5,
+      "velX": 1.5,
+      "velY": -0.2
+    }
+  ],
+  "timestamp": "2025-10-24 15:30:45"
+}
+```
+
+El archivo se guarda en:
+- **Windows:** `C:\Users\[Usuario]\AppData\LocalLow\[CompanyName]\[GameName]\gamesave.json`
+- **Mac:** `~/Library/Application Support/[CompanyName]/[GameName]/gamesave.json`
+
+---
+
+## 💡 Próximos Pasos
+
+Una vez funcione todo:
+1. Añadir más elementos serializables (puntuación, items, etc.)
+2. Implementar sincronización de animaciones
+3. Añadir efectos visuales para indicar jugador local vs remoto
+4. Sistema de respawn cuando un jugador cae
+5. Sincronizar estado del nivel (puertas, botones, etc.)
+
+---
+
+¡Buena suerte con tu proyecto! 🚀
+
+
+Problema identificado:
+Los dos jugadores se conectaban al servidor, pero cada uno cargaba su propia escena sin saber del otro jugador. Era como si jugaran en "mundos paralelos".
+Solución implementada:
+
+GameManager - Instancia AMBOS personajes en cada cliente, pero solo uno tiene control
+NetworkPlayer - Envía la posición del jugador local y recibe la del remoto
+IDs de jugador - El servidor asigna Player1 y Player2 automáticamente
+Sincronización en tiempo real - Las posiciones se envían 20 veces por segundo
+Sistema de guardado JSON - Guarda/carga posiciones y velocidades
+
+Cómo funciona:
+Cliente 1 (Player1)          Servidor          Cliente 2 (Player2)
+      |                          |                        |
+      |--- USERNAME:Player1 ---->|                        |
+      |                          |<---- USERNAME:Player2 ---|
+      |<--- GAME_START:1 --------|                        |
+      |                          |------ GAME_START:2 ---->|
+      |                          |                        |
+   [Carga GameScene]         [Reenvía]             [Carga GameScene]
+   [Instancia P1+P2]         posiciones            [Instancia P1+P2]
+   [Controla P1]             <-------->            [Controla P2]
+   [Ve a P2 moverse]                               [Ve a P1 moverse]

@@ -10,21 +10,32 @@ public class UDPClient : MonoBehaviour
 {
     Socket clientSocket;
     IPEndPoint serverEndPoint;
-
     public string serverIP = "127.0.0.1";
     public string username = "User";
     int serverPort = 9050;
-
     private bool isRunning = true;
     private bool hasShutdown = false;
-
     private WaitingRoom waitingRoom;
     private bool shouldLoadWaitingRoom = false;
     private bool shouldLoadGameScene = false;
     private bool isInitialized = false;
-
     private string pendingPlayerList = "";
     private bool hasPendingPlayerList = false;
+
+    // NUEVO: Para gestionar el GameManager
+    private int assignedPlayerID = 0;
+    private bool shouldSetPlayerID = false;
+
+    // NUEVO: Para actualizar posiciones
+    private struct PositionUpdate
+    {
+        public int playerID;
+        public Vector3 position;
+        public Vector2 velocity;
+    }
+    private PositionUpdate pendingPositionUpdate;
+    private bool hasPendingPositionUpdate = false;
+    private object positionLock = new object();
 
     void Start()
     {
@@ -53,6 +64,40 @@ public class UDPClient : MonoBehaviour
         {
             shouldLoadGameScene = false;
             SceneManager.LoadScene("GameScene");
+        }
+
+        // NUEVO: Asignar Player ID cuando el GameManager esté listo
+        if (shouldSetPlayerID)
+        {
+            shouldSetPlayerID = false;
+            GameManager gameManager = GameManager.Instance;
+            if (gameManager != null)
+            {
+                gameManager.SetLocalPlayerID(assignedPlayerID);
+            }
+            else
+            {
+                Debug.LogWarning("GameManager no encontrado, reintentando...");
+                shouldSetPlayerID = true; // Reintentar en el próximo frame
+            }
+        }
+
+        // NUEVO: Actualizar posición del jugador remoto
+        if (hasPendingPositionUpdate)
+        {
+            lock (positionLock)
+            {
+                GameManager gameManager = GameManager.Instance;
+                if (gameManager != null)
+                {
+                    gameManager.UpdateRemotePlayerPosition(
+                        pendingPositionUpdate.playerID,
+                        pendingPositionUpdate.position,
+                        pendingPositionUpdate.velocity
+                    );
+                }
+                hasPendingPositionUpdate = false;
+            }
         }
 
         if (hasPendingPlayerList && GetWaitingRoomManager() != null)
@@ -84,7 +129,6 @@ public class UDPClient : MonoBehaviour
         {
             clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
             serverEndPoint = new IPEndPoint(IPAddress.Parse(serverIP), serverPort);
-
             Thread receiveThread = new Thread(ReceiveMessages);
             receiveThread.Start();
         }
@@ -112,16 +156,20 @@ public class UDPClient : MonoBehaviour
 
     public void SendChatMessage(string message)
     {
+        SendMessage("CHAT:" + message);
+    }
+
+    // NUEVO: Método genérico para enviar mensajes
+    public void SendMessage(string message)
+    {
         try
         {
-            string chatMessage = "CHAT:" + message;
-            byte[] data = Encoding.ASCII.GetBytes(chatMessage);
+            byte[] data = Encoding.ASCII.GetBytes(message);
             clientSocket.SendTo(data, serverEndPoint);
-            Debug.Log("Sent chat message to server: " + message);
         }
         catch (Exception e)
         {
-            Debug.LogError("Error sending chat message: " + e.Message);
+            Debug.LogError("Error sending message: " + e.Message);
         }
     }
 
@@ -136,11 +184,15 @@ public class UDPClient : MonoBehaviour
             {
                 remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
                 int receiveBytes = clientSocket.ReceiveFrom(buffer, ref remoteEndPoint);
-
                 string message = Encoding.ASCII.GetString(buffer, 0, receiveBytes);
-                Debug.Log("Received from server: " + message);
 
-                // Receives different types of messages
+                // Filtrar mensajes ping para no saturar el log
+                if (message != "ping")
+                {
+                    Debug.Log("Received from server: " + message);
+                }
+
+                // Procesar mensajes
                 if (message.StartsWith("SERVER_NAME:"))
                 {
                     string serverName = message.Substring(12);
@@ -154,7 +206,6 @@ public class UDPClient : MonoBehaviour
                     {
                         pendingPlayerList = playerList;
                         hasPendingPlayerList = true;
-                        Debug.Log("Pending player list stored: " + playerList);
                     }
                     else
                     {
@@ -178,12 +229,24 @@ public class UDPClient : MonoBehaviour
                 }
                 else if (message.StartsWith("GAME_START:"))
                 {
-                    Debug.Log("Game is starting!");
+                    // MODIFICADO: Ahora incluye el Player ID
+                    string playerIDStr = message.Substring(11);
+                    if (int.TryParse(playerIDStr, out int playerID))
+                    {
+                        assignedPlayerID = playerID;
+                        shouldSetPlayerID = true;
+                        Debug.Log($"Game starting! Assigned as Player {playerID}");
+                    }
                     shouldLoadGameScene = true;
+                }
+                // NUEVO: Recibir actualizaciones de posición
+                else if (message.StartsWith("POSITION:"))
+                {
+                    ProcessPositionUpdate(message.Substring(9));
                 }
                 else if (message == "ping")
                 {
-                    Debug.Log("Received ping from server");
+                    // Ping recibido (silencioso)
                 }
             }
             catch (SocketException se)
@@ -205,6 +268,39 @@ public class UDPClient : MonoBehaviour
         }
     }
 
+    // NUEVO: Procesar actualizaciones de posición
+    private void ProcessPositionUpdate(string posData)
+    {
+        try
+        {
+            // Formato: playerID:x:y:velX:velY
+            string[] parts = posData.Split(':');
+            if (parts.Length >= 5)
+            {
+                int playerID = int.Parse(parts[0]);
+                float x = float.Parse(parts[1]);
+                float y = float.Parse(parts[2]);
+                float velX = float.Parse(parts[3]);
+                float velY = float.Parse(parts[4]);
+
+                lock (positionLock)
+                {
+                    pendingPositionUpdate = new PositionUpdate
+                    {
+                        playerID = playerID,
+                        position = new Vector3(x, y, 0),
+                        velocity = new Vector2(velX, velY)
+                    };
+                    hasPendingPositionUpdate = true;
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("Error parsing position update: " + e.Message);
+        }
+    }
+
     private void RemovePlayerFromRoom(string playerName)
     {
         var waitingRoom = GetWaitingRoomManager();
@@ -222,14 +318,13 @@ public class UDPClient : MonoBehaviour
         if (string.IsNullOrEmpty(playerList)) return;
 
         string[] players = playerList.Split(',');
-
         var waitingRoom = GetWaitingRoomManager();
         if (waitingRoom != null)
         {
             waitingRoom.ClearPlayers();
             foreach (string player in players)
             {
-                if (!string.IsNullOrEmpty(player.Trim())) 
+                if (!string.IsNullOrEmpty(player.Trim()))
                     waitingRoom.AddPlayer(player.Trim());
             }
         }
@@ -242,9 +337,7 @@ public class UDPClient : MonoBehaviour
         {
             string sender = chatMessage.Substring(0, separatorIndex);
             string message = chatMessage.Substring(separatorIndex + 1);
-
             Debug.Log("From " + sender + ": " + message);
-
             var waitingRoom = GetWaitingRoomManager();
             if (waitingRoom != null) waitingRoom.AddChatMessage(sender, message);
         }
@@ -255,14 +348,19 @@ public class UDPClient : MonoBehaviour
         shouldLoadWaitingRoom = true;
     }
 
-    // Cleanup on exit
     void Shutdown()
     {
         if (hasShutdown) return;
         hasShutdown = true;
         isRunning = false;
-
-        try { if (clientSocket != null) { clientSocket.Close(); } } catch { }
+        try
+        {
+            if (clientSocket != null)
+            {
+                clientSocket.Close();
+            }
+        }
+        catch { }
     }
 
     void OnApplicationQuit() => Shutdown();

@@ -10,12 +10,9 @@ public class UDPServer : MonoBehaviour
 {
     Socket serverSocket;
     IPEndPoint ipep;
-
     private bool isRunning = true;
     private bool hasShutdown = false;
     private string serverName = "GameServer";
-
-    // Accept several connections
     private List<ClientInfo> connectedClients = new List<ClientInfo>();
     private object clientsLock = new object();
     private bool gameStarted = false;
@@ -24,9 +21,16 @@ public class UDPServer : MonoBehaviour
     {
         public IPEndPoint endpoint;
         public string username;
+        public int playerID; // NUEVO
 
-        public ClientInfo(IPEndPoint ep) { endpoint = ep; username = ""; }
+        public ClientInfo(IPEndPoint ep, int id)
+        {
+            endpoint = ep;
+            username = "";
+            playerID = id; // Asignar ID al crear
+        }
     }
+
     private void Awake()
     {
         DontDestroyOnLoad(this.gameObject);
@@ -34,26 +38,19 @@ public class UDPServer : MonoBehaviour
 
     private void Start()
     {
-        // TO DO 1: Create and bind the socket
         CreateAndBindTheSocket();
-
         Thread receiveThread = new Thread(ReceiveMessages);
         receiveThread.Start();
     }
 
     private void CreateAndBindTheSocket()
     {
-        // We create the socket
         serverSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-        // And the adress
         ipep = new IPEndPoint(IPAddress.Any, 9050);
-        // And we assign the adress to the socket
         serverSocket.Bind(ipep);
-
         Debug.Log("UDP Server started on port 9050, waiting for clients...");
     }
 
-    // TO DO 3: Receive the message and manage the connection
     void ReceiveMessages()
     {
         byte[] buffer = new byte[1024];
@@ -65,24 +62,24 @@ public class UDPServer : MonoBehaviour
             {
                 remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
                 int receiveBytes = serverSocket.ReceiveFrom(buffer, ref remoteEndPoint);
-
                 string message = Encoding.ASCII.GetString(buffer, 0, receiveBytes);
                 IPEndPoint clientEndPoint = (IPEndPoint)remoteEndPoint;
 
-                Debug.Log("Received from client: " + message);
+                // Filtrar mensajes POSITION del log para no saturar
+                if (!message.StartsWith("POSITION:"))
+                {
+                    Debug.Log("Received from client: " + message);
+                }
 
-                // Check if the client is already registered
                 ClientInfo client = GetOrCreateClient(clientEndPoint);
 
                 if (message.StartsWith("USERNAME:"))
                 {
                     string username = message.Substring(9).Trim();
-
                     if (client.username != username)
                     {
                         client.username = username;
-                        Debug.Log("User joined: " + username);
-
+                        Debug.Log($"User joined: {username} as Player {client.playerID}");
                         SendServerName(clientEndPoint);
                         SendUserList(client);
                         BroadcastToClients("PLAYER_JOINED:" + username, client);
@@ -95,8 +92,12 @@ public class UDPServer : MonoBehaviour
                     Debug.Log("From " + client.username + ": " + chatMessage);
                     BroadcastToClients("CHAT:" + client.username + ":" + chatMessage);
                 }
+                // NUEVO: Reenviar actualizaciones de posición al otro jugador
+                else if (message.StartsWith("POSITION:"))
+                {
+                    ForwardPositionUpdate(message, client);
+                }
 
-                // TO DO 4: Answering with the server
                 SendPing(clientEndPoint);
             }
             catch (SocketException se)
@@ -118,17 +119,59 @@ public class UDPServer : MonoBehaviour
         }
     }
 
+    // NUEVO: Reenviar posición solo al otro jugador
+    private void ForwardPositionUpdate(string message, ClientInfo sender)
+    {
+        byte[] data = Encoding.ASCII.GetBytes(message);
+        lock (clientsLock)
+        {
+            foreach (var client in connectedClients)
+            {
+                // Enviar solo al otro jugador (no al que envió)
+                if (client != sender && !string.IsNullOrEmpty(client.username))
+                {
+                    try
+                    {
+                        serverSocket.SendTo(data, client.endpoint);
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogError("Error forwarding position to " + client.username + ": " + e.Message);
+                    }
+                }
+            }
+        }
+    }
+
+    // MODIFICADO: Enviar ID de jugador con GAME_START
     private void CheckAndStartGame()
     {
         lock (clientsLock)
         {
             int connectedPlayerCount = connectedClients.Count;
-
             if (connectedPlayerCount == 2 && !gameStarted)
             {
                 gameStarted = true;
                 Debug.Log("Starting game...");
-                BroadcastToClients("GAME_START:");
+
+                // Enviar a cada cliente su ID específico
+                foreach (var client in connectedClients)
+                {
+                    if (!string.IsNullOrEmpty(client.username))
+                    {
+                        string startMessage = "GAME_START:" + client.playerID;
+                        byte[] data = Encoding.ASCII.GetBytes(startMessage);
+                        try
+                        {
+                            serverSocket.SendTo(data, client.endpoint);
+                            Debug.Log($"Sent GAME_START to {client.username} with ID {client.playerID}");
+                        }
+                        catch (Exception e)
+                        {
+                            Debug.LogError($"Error sending game start to {client.username}: " + e.Message);
+                        }
+                    }
+                }
             }
             else if (connectedPlayerCount < 2 && gameStarted)
             {
@@ -145,7 +188,6 @@ public class UDPServer : MonoBehaviour
             if (connectedClients.Remove(disconnectedClient))
             {
                 Debug.Log("Player disconnected: " + disconnectedClient.username);
-
                 if (!string.IsNullOrEmpty(disconnectedClient.username))
                 {
                     BroadcastToClients("PLAYER_LEFT:" + disconnectedClient.username);
@@ -158,12 +200,13 @@ public class UDPServer : MonoBehaviour
     private void BroadcastToClients(string message, ClientInfo excludedClient = null)
     {
         byte[] data = Encoding.ASCII.GetBytes(message);
-
         lock (clientsLock)
         {
             foreach (var client in connectedClients)
             {
-                if (client == excludedClient || string.IsNullOrEmpty(client.username)) continue;
+                if (client == excludedClient || string.IsNullOrEmpty(client.username))
+                    continue;
+
                 try
                 {
                     serverSocket.SendTo(data, client.endpoint);
@@ -176,7 +219,10 @@ public class UDPServer : MonoBehaviour
             }
         }
 
-        Debug.Log("Broadcasted message: " + message);
+        if (!message.StartsWith("POSITION:"))
+        {
+            Debug.Log("Broadcasted message: " + message);
+        }
     }
 
     private void SendUserList(ClientInfo newClient)
@@ -191,7 +237,6 @@ public class UDPServer : MonoBehaviour
                     playerList += c.username + ",";
                 }
             }
-
             if (playerList.EndsWith(","))
                 playerList = playerList.Substring(0, playerList.Length - 1);
 
@@ -215,6 +260,7 @@ public class UDPServer : MonoBehaviour
         }
     }
 
+    // MODIFICADO: Asignar ID automáticamente
     private ClientInfo GetOrCreateClient(IPEndPoint clientEndPoint)
     {
         lock (clientsLock)
@@ -228,10 +274,11 @@ public class UDPServer : MonoBehaviour
                 }
             }
 
-            // Create new client if not found
-            ClientInfo newClient = new ClientInfo(clientEndPoint);
+            // Asignar ID basado en el número de clientes (1 o 2)
+            int newPlayerID = connectedClients.Count + 1;
+            ClientInfo newClient = new ClientInfo(clientEndPoint, newPlayerID);
             connectedClients.Add(newClient);
-            Debug.Log("New client registered: " + clientEndPoint);
+            Debug.Log($"New client registered: {clientEndPoint} as Player {newPlayerID}");
             return newClient;
         }
     }
@@ -240,11 +287,10 @@ public class UDPServer : MonoBehaviour
     {
         string message = "SERVER_NAME:" + serverName;
         byte[] data = Encoding.ASCII.GetBytes(message);
-
         try
         {
             serverSocket.SendTo(data, endPoint);
-            Debug.Log("Sent server name to client: " + serverName);  
+            Debug.Log("Sent server name to client: " + serverName);
         }
         catch (Exception e)
         {
@@ -259,7 +305,6 @@ public class UDPServer : MonoBehaviour
             string ping = "ping";
             byte[] data = Encoding.ASCII.GetBytes(ping);
             serverSocket.SendTo(data, endPoint);
-            Debug.Log("Sent ping to: " + endPoint.ToString());  
         }
         catch (Exception e)
         {
@@ -267,14 +312,16 @@ public class UDPServer : MonoBehaviour
         }
     }
 
-    // Cleanup on exit
     void Shutdown()
     {
         if (hasShutdown) return;
         hasShutdown = true;
         isRunning = false;
-      
-        try { if (serverSocket != null) serverSocket.Close(); } catch { }
+        try
+        {
+            if (serverSocket != null) serverSocket.Close();
+        }
+        catch { }
     }
 
     void OnApplicationQuit() => Shutdown();
