@@ -3,22 +3,22 @@ using UnityEngine.InputSystem;
 
 public class PlayerMovement2D : MonoBehaviour
 {
-    [Header("Movimiento")]
-    [SerializeField] private float velocidadMovimiento = 8f;
-    [SerializeField] private float suavizadoMovimiento = 0.1f;
+    [Header("Movement")]
+    [SerializeField] private float movementSpeed = 8f;
+    [SerializeField] private float movementSmoothing = 0.1f;
 
-    [Header("Salto")]
-    [SerializeField] private float fuerzaSalto = 12f;
-    [SerializeField] private float gravedadCaida = 2.5f;
-    [SerializeField] private float gravedadBajaSalto = 2f;
+    [Header("Jump")]
+    [SerializeField] private float jumpForce = 12f;
+    [SerializeField] private float fallGravity = 2.5f;
+    [SerializeField] private float lowJumpGravity = 2f;
     [SerializeField] private Transform groundCheck;
     [SerializeField] private float groundCheckRadius = 0.2f;
     [SerializeField] private LayerMask groundLayer;
 
     private Rigidbody2D rb;
-    private float movimientoHorizontal;
-    private Vector2 velocidadActual;
-    private bool enSuelo;
+    private float horizontalMovement;
+    private Vector2 currentVelocity;
+    private bool isGrounded;
 
     void Start()
     {
@@ -27,55 +27,54 @@ public class PlayerMovement2D : MonoBehaviour
 
     void Update()
     {
-        // Input de movimiento usando el nuevo Input System
+        // Movement input using the new Input System
         Keyboard keyboard = Keyboard.current;
-        if (keyboard != null)
+        if (keyboard == null) return;
+
+        horizontalMovement = 0f;
+
+        if (keyboard.aKey.isPressed)
+            horizontalMovement = -1f;
+        else if (keyboard.dKey.isPressed)
+            horizontalMovement = 1f;
+
+        // Check if grounded
+        isGrounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
+
+        // Jump input
+        if (keyboard.spaceKey.wasPressedThisFrame && isGrounded)
         {
-            movimientoHorizontal = 0f;
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
+        }
 
-            if (keyboard.aKey.isPressed)
-                movimientoHorizontal = -1f;
-            else if (keyboard.dKey.isPressed)
-                movimientoHorizontal = 1f;
-
-            // Check si está en el suelo
-            enSuelo = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
-
-            // Input de salto
-            if (keyboard.spaceKey.wasPressedThisFrame && enSuelo)
-            {
-                rb.linearVelocity = new Vector2(rb.linearVelocity.x, fuerzaSalto);
-            }
-
-            // Mejor gravedad para un salto más realista
-            if (rb.linearVelocity.y < 0)
-            {
-                // Cae más rápido
-                rb.linearVelocity += Vector2.up * Physics2D.gravity.y * (gravedadCaida - 1) * Time.deltaTime;
-            }
-            else if (rb.linearVelocity.y > 0 && !keyboard.spaceKey.isPressed)
-            {
-                // Si suelta el botón de salto, cae más rápido (salto variable)
-                rb.linearVelocity += Vector2.up * Physics2D.gravity.y * (gravedadBajaSalto - 1) * Time.deltaTime;
-            }
+        // Better gravity for more realistic jump
+        if (rb.linearVelocity.y < 0)
+        {
+            // Falls faster
+            rb.linearVelocity += Vector2.up * Physics2D.gravity.y * (fallGravity - 1) * Time.deltaTime;
+        }
+        else if (rb.linearVelocity.y > 0 && !keyboard.spaceKey.isPressed)
+        {
+            // If jump button is released, falls faster (variable jump)
+            rb.linearVelocity += Vector2.up * Physics2D.gravity.y * (lowJumpGravity - 1) * Time.deltaTime;
         }
     }
 
     void FixedUpdate()
     {
-        // Movimiento horizontal suavizado
-        float velocidadObjetivo = movimientoHorizontal * velocidadMovimiento;
+        // Smoothed horizontal movement
+        float targetVelocity = horizontalMovement * movementSpeed;
         rb.linearVelocity = Vector2.SmoothDamp(
             rb.linearVelocity,
-            new Vector2(velocidadObjetivo, rb.linearVelocity.y),
-            ref velocidadActual,
-            suavizadoMovimiento
+            new Vector2(targetVelocity, rb.linearVelocity.y),
+            ref currentVelocity,
+            movementSmoothing
         );
     }
 
     void OnDrawGizmosSelected()
     {
-        // Visualizar el groundCheck en el editor
+        // Visualize groundCheck in the editor
         if (groundCheck != null)
         {
             Gizmos.color = Color.red;
