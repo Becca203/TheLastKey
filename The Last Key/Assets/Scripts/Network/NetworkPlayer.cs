@@ -16,7 +16,6 @@ public class NetworkPlayer : MonoBehaviour
     private Vector3 targetPosition;
     private Vector2 targetVelocity;
 
-    // Initialize player components and find network client
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
@@ -81,7 +80,6 @@ public class NetworkPlayer : MonoBehaviour
         }
     }
 
-    // Update target position for remote player interpolation
     public void UpdatePosition(Vector3 position, Vector2 velocity)
     {
         targetPosition = position;
@@ -117,7 +115,6 @@ public class NetworkPlayer : MonoBehaviour
         }
     }
 
-    // Get current player data for saving
     public PlayerData GetPlayerData()
     {
         if (rb == null) rb = GetComponent<Rigidbody2D>();
@@ -128,7 +125,6 @@ public class NetworkPlayer : MonoBehaviour
         );
     }
 
-    // Load saved player data
     public void LoadPlayerData(PlayerData data)
     {
         transform.position = data.GetPosition();

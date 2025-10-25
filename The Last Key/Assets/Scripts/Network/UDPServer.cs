@@ -36,7 +36,6 @@ public class UDPServer : MonoBehaviour
         DontDestroyOnLoad(this.gameObject);
     }
 
-    // Initialize server socket and start listening
     private void Start()
     {
         CreateAndBindTheSocket();
@@ -53,7 +52,7 @@ public class UDPServer : MonoBehaviour
         Debug.Log("UDP Server started on port 9050");
     }
 
-    // Continuously receive and process messages from clients
+    // Receive and process messages from clients
     void ReceiveMessages()
     {
         byte[] buffer = new byte[2048];
@@ -76,7 +75,6 @@ public class UDPServer : MonoBehaviour
 
                 ClientInfo client = GetOrCreateClient(clientEndPoint);
                 ProcessMessage(msgType, buffer, receiveBytes, client);
-                SendPing(clientEndPoint);
             }
             catch (SocketException se)
             {
@@ -97,7 +95,7 @@ public class UDPServer : MonoBehaviour
         }
     }
 
-    // Route message to appropriate handler based on type
+    // Process messages based on their type
     private void ProcessMessage(string msgType, byte[] buffer, int length, ClientInfo client)
     {
         switch (msgType)
@@ -117,7 +115,6 @@ public class UDPServer : MonoBehaviour
         }
     }
 
-    // Handle new client username and notify other clients
     private void ProcessUsernameMessage(byte[] buffer, int length, ClientInfo client)
     {
         SimpleMessage usernameMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
@@ -139,7 +136,6 @@ public class UDPServer : MonoBehaviour
         }
     }
 
-    // Broadcast chat message to all clients
     private void ProcessChatMessage(byte[] buffer, int length)
     {
         ChatMessage chatMsg = NetworkSerializer.Deserialize<ChatMessage>(buffer, length);
@@ -150,7 +146,6 @@ public class UDPServer : MonoBehaviour
         }
     }
 
-    // Forward position update to other clients
     private void ProcessPositionMessage(byte[] buffer, int length, ClientInfo sender)
     {
         PositionMessage posMsg = NetworkSerializer.Deserialize<PositionMessage>(buffer, length);
@@ -160,7 +155,6 @@ public class UDPServer : MonoBehaviour
         }
     }
 
-    // Send position update to all clients except sender
     private void ForwardPositionUpdate(PositionMessage posMsg, ClientInfo sender)
     {
         byte[] data = NetworkSerializer.Serialize(posMsg);
@@ -329,7 +323,6 @@ public class UDPServer : MonoBehaviour
         }
     }
 
-    // Send server name to newly connected client
     private void SendServerName(IPEndPoint endPoint)
     {
         SimpleMessage msg = new SimpleMessage("USERNAME", "SERVER_NAME:" + serverName);
@@ -342,21 +335,6 @@ public class UDPServer : MonoBehaviour
         catch (Exception e)
         {
             Debug.LogError("Error sending server name: " + e.Message);
-        }
-    }
-
-    // Send ping to keep connection alive
-    private void SendPing(IPEndPoint endPoint)
-    {
-        try
-        {
-            SimpleMessage ping = new SimpleMessage("ping");
-            byte[] data = NetworkSerializer.Serialize(ping);
-            serverSocket.SendTo(data, endPoint);
-        }
-        catch (Exception e)
-        {
-            Debug.LogError("Error sending ping: " + e.Message);
         }
     }
 

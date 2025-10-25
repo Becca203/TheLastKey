@@ -54,7 +54,6 @@ public class WaitingRoom : MonoBehaviour
 
     public void SendChatMessage()
     {
-        // Check if the input field is not empty
         if (!string.IsNullOrEmpty(chatMessageInput.text))
         {
             string message = chatMessageInput.text.Trim();
@@ -63,17 +62,14 @@ public class WaitingRoom : MonoBehaviour
         }
     }
 
-    // Sends a chat message to the server via the UDPClient.
     private void SendChatToServer(string message)
     {
         UDPClient udpClient = FindAnyObjectByType<UDPClient>();
         if (udpClient != null) udpClient.SendChatMessage(message);
     }
 
-    // Adds a new chat message to the chat display.
     public void AddChatMessage(string sender, string message)
     {
-        // Add the formatted message to the list
         chatMessages.Add(sender + ": " + message);
         if (chatMessages.Count > 10)
         {
@@ -84,7 +80,6 @@ public class WaitingRoom : MonoBehaviour
 
     public void AddPlayer(string username)
     {
-        // Only add if the player isn't already in the list
         if (!connectedPlayers.Contains(username))
         {
             connectedPlayers.Add(username);
@@ -98,7 +93,6 @@ public class WaitingRoom : MonoBehaviour
 
     public void RemovePlayer(string username)
     {
-        // Remove the player and announce if they were in the list
         if (connectedPlayers.Remove(username))
         {
             UpdateInfo();

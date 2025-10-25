@@ -34,7 +34,6 @@ public class UDPClient : MonoBehaviour
     private bool hasPendingPositionUpdate = false;
     private object positionLock = new object();
 
-    // Initialize socket and send initial handshake
     void Start()
     {
         if (!isInitialized)
@@ -138,7 +137,6 @@ public class UDPClient : MonoBehaviour
         }
     }
 
-    // Send raw bytes to server
     public void SendBytes(byte[] data)
     {
         try
@@ -151,7 +149,6 @@ public class UDPClient : MonoBehaviour
         }
     }
 
-    // Continuously receive and process messages from server
     void ReceiveMessages()
     {
         byte[] buffer = new byte[2048];
@@ -166,7 +163,7 @@ public class UDPClient : MonoBehaviour
 
                 string msgType = NetworkSerializer.GetMessageType(buffer, receiveBytes);
 
-                if (msgType != "POSITION" && msgType != "ping")
+                if (msgType != "POSITION")
                 {
                     Debug.Log("Received message type: " + msgType);
                 }
@@ -192,7 +189,7 @@ public class UDPClient : MonoBehaviour
         }
     }
 
-    // Route message to appropriate handler based on type
+    // Process message based on its type
     private void ProcessMessage(string msgType, byte[] buffer, int length)
     {
         switch (msgType)
@@ -218,15 +215,12 @@ public class UDPClient : MonoBehaviour
             case "POSITION":
                 ProcessPositionMessage(buffer, length);
                 break;
-            case "ping":
-                break;
             default:
                 Debug.LogWarning("Unknown message type: " + msgType);
                 break;
         }
     }
 
-    // Handle server name confirmation message
     private void ProcessUsernameMessage(byte[] buffer, int length)
     {
         SimpleMessage usernameMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
@@ -238,7 +232,6 @@ public class UDPClient : MonoBehaviour
         }
     }
 
-    // Update waiting room with full player list
     private void ProcessPlayerListMessage(byte[] buffer, int length)
     {
         PlayerListMessage playerListMsg = NetworkSerializer.Deserialize<PlayerListMessage>(buffer, length);
@@ -257,7 +250,6 @@ public class UDPClient : MonoBehaviour
         }
     }
 
-    // Add newly joined player to waiting room
     private void ProcessPlayerJoinedMessage(byte[] buffer, int length)
     {
         SimpleMessage joinedMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
@@ -268,7 +260,6 @@ public class UDPClient : MonoBehaviour
         }
     }
 
-    // Remove disconnected player from waiting room
     private void ProcessPlayerLeftMessage(byte[] buffer, int length)
     {
         SimpleMessage leftMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
@@ -279,7 +270,6 @@ public class UDPClient : MonoBehaviour
         }
     }
 
-    // Display received chat message in waiting room
     private void ProcessChatMessage(byte[] buffer, int length)
     {
         ChatMessage chatMsg = NetworkSerializer.Deserialize<ChatMessage>(buffer, length);
@@ -294,7 +284,6 @@ public class UDPClient : MonoBehaviour
         }
     }
 
-    // Handle game start message and load game scene
     private void ProcessGameStartMessage(byte[] buffer, int length)
     {
         GameStartMessage gameStartMsg = NetworkSerializer.Deserialize<GameStartMessage>(buffer, length);
@@ -307,7 +296,6 @@ public class UDPClient : MonoBehaviour
         }
     }
 
-    // Update remote player position from network
     private void ProcessPositionMessage(byte[] buffer, int length)
     {
         PositionMessage posMsg = NetworkSerializer.Deserialize<PositionMessage>(buffer, length);
@@ -326,7 +314,6 @@ public class UDPClient : MonoBehaviour
         }
     }
 
-    // Get or create waiting room manager reference
     private WaitingRoom GetWaitingRoomManager()
     {
         if (waitingRoom == null)

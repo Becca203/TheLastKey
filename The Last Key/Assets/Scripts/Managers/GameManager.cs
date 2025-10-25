@@ -14,7 +14,7 @@ public class GameManager : MonoBehaviour
     public Transform player2SpawnPoint;
 
     [Header("Network")]
-    public int localPlayerID = 0; // 1 o 2, asignado por el servidor
+    public int localPlayerID = 0; 
 
     private GameObject localPlayerObject;
     private GameObject remotePlayerObject;
@@ -37,30 +37,12 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
-        // Buscar el UDPClient
-        udpClient = FindAnyObjectByType<UDPClient>();
-        if (udpClient == null)
-        {
-            Debug.LogError("UDPClient not found!");
-            return;
-        }
-
-        // Si ya estamos en GameScene, inicializar
-        if (SceneManager.GetActiveScene().name == "GameScene")
-        {
-            InitializePlayers();
-        }
+        if (udpClient != null)
+            udpClient = FindAnyObjectByType<UDPClient>();
     }
 
-    void OnEnable()
-    {
-        SceneManager.sceneLoaded += OnSceneLoaded;
-    }
-
-    void OnDisable()
-    {
-        SceneManager.sceneLoaded -= OnSceneLoaded;
-    }
+    void OnEnable() => SceneManager.sceneLoaded += OnSceneLoaded;
+    void OnDisable() => SceneManager.sceneLoaded -= OnSceneLoaded;
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
@@ -73,7 +55,6 @@ public class GameManager : MonoBehaviour
     public void SetLocalPlayerID(int playerID)
     {
         localPlayerID = playerID;
-        Debug.Log("Local Player ID set to: " + playerID);
     }
 
     private void InitializePlayers()
@@ -84,19 +65,18 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        // Encontrar spawn points si no están asignados
         if (player1SpawnPoint == null)
         {
             GameObject spawn1 = GameObject.Find("Player1SpawnPoint");
             if (spawn1 != null) player1SpawnPoint = spawn1.transform;
         }
+
         if (player2SpawnPoint == null)
         {
             GameObject spawn2 = GameObject.Find("Player2SpawnPoint");
             if (spawn2 != null) player2SpawnPoint = spawn2.transform;
         }
 
-        // Instanciar AMBOS jugadores
         Vector3 p1Pos = player1SpawnPoint != null ? player1SpawnPoint.position : new Vector3(-2, 0, 0);
         Vector3 p2Pos = player2SpawnPoint != null ? player2SpawnPoint.position : new Vector3(2, 0, 0);
 
@@ -106,7 +86,7 @@ public class GameManager : MonoBehaviour
         player1Instance.name = "Player1";
         player2Instance.name = "Player2";
 
-        // Configurar quién es el jugador local y quién el remoto
+        // Determines which users is local and which is remote
         if (localPlayerID == 1)
         {
             localPlayerObject = player1Instance;
@@ -118,23 +98,19 @@ public class GameManager : MonoBehaviour
             remotePlayerObject = player1Instance;
         }
 
-        // Configurar componentes de red
         SetupLocalPlayer();
         SetupRemotePlayer();
-
-        Debug.Log("Players initialized. Local: Player " + localPlayerID);
     }
 
     private void SetupLocalPlayer()
     {
-        // El jugador local tiene control
+        // Local player has control of movement
         localPlayerMovement = localPlayerObject.GetComponent<PlayerMovement2D>();
         if (localPlayerMovement == null)
             localPlayerMovement = localPlayerObject.AddComponent<PlayerMovement2D>();
 
         localPlayerMovement.enabled = true;
 
-        // Añadir NetworkPlayer para enviar posición
         localNetworkPlayer = localPlayerObject.GetComponent<NetworkPlayer>();
         if (localNetworkPlayer == null)
             localNetworkPlayer = localPlayerObject.AddComponent<NetworkPlayer>();
@@ -147,12 +123,10 @@ public class GameManager : MonoBehaviour
 
     private void SetupRemotePlayer()
     {
-        // El jugador remoto NO tiene control de movimiento
         PlayerMovement2D remoteMovement = remotePlayerObject.GetComponent<PlayerMovement2D>();
         if (remoteMovement != null)
             remoteMovement.enabled = false;
 
-        // Añadir NetworkPlayer para recibir posición
         remoteNetworkPlayer = remotePlayerObject.GetComponent<NetworkPlayer>();
         if (remoteNetworkPlayer == null)
             remoteNetworkPlayer = remotePlayerObject.AddComponent<NetworkPlayer>();

@@ -38,7 +38,6 @@ public class PlayerMovement2D : MonoBehaviour
         else if (keyboard.dKey.isPressed)
             horizontalMovement = 1f;
 
-        // Check if grounded
         isGrounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
 
         // Jump input
@@ -50,12 +49,10 @@ public class PlayerMovement2D : MonoBehaviour
         // Better gravity for more realistic jump
         if (rb.linearVelocity.y < 0)
         {
-            // Falls faster
             rb.linearVelocity += Vector2.up * Physics2D.gravity.y * (fallGravity - 1) * Time.deltaTime;
         }
         else if (rb.linearVelocity.y > 0 && !keyboard.spaceKey.isPressed)
         {
-            // If jump button is released, falls faster (variable jump)
             rb.linearVelocity += Vector2.up * Physics2D.gravity.y * (lowJumpGravity - 1) * Time.deltaTime;
         }
     }
