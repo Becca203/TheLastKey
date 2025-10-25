@@ -6,17 +6,17 @@ public class NetworkPlayer : MonoBehaviour
     public int playerID = 0;
 
     [Header("Network Settings")]
-    [SerializeField] private float sendRate = 20f; // Enviar 20 veces por segundo
+    [SerializeField] private float sendRate = 20f;
     [SerializeField] private float interpolationSpeed = 10f;
 
     private Rigidbody2D rb;
     private UDPClient udpClient;
     private float sendTimer = 0f;
 
-    // Para interpolación suave del jugador remoto
     private Vector3 targetPosition;
     private Vector2 targetVelocity;
 
+    // Initialize player components and find network client
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
@@ -24,17 +24,17 @@ public class NetworkPlayer : MonoBehaviour
 
         if (udpClient == null)
         {
-            Debug.LogError("NetworkPlayer: UDPClient not found!");
+            Debug.LogError("UDPClient not found");
         }
 
         targetPosition = transform.position;
     }
 
+    // Handle network updates: send position if local, interpolate if remote
     void Update()
     {
         if (isLocalPlayer)
         {
-            // Enviar posición periódicamente
             sendTimer += Time.deltaTime;
             if (sendTimer >= 1f / sendRate)
             {
@@ -44,14 +44,12 @@ public class NetworkPlayer : MonoBehaviour
         }
         else
         {
-            // Interpolar posición del jugador remoto
             transform.position = Vector3.Lerp(
                 transform.position,
                 targetPosition,
                 interpolationSpeed * Time.deltaTime
             );
 
-            // Actualizar velocidad del Rigidbody para animaciones
             if (rb != null)
             {
                 rb.linearVelocity = Vector2.Lerp(
@@ -63,12 +61,12 @@ public class NetworkPlayer : MonoBehaviour
         }
     }
 
+    // Serialize and send current position and velocity to server
     private void SendPositionUpdate()
     {
         if (udpClient == null || rb == null) return;
 
-        // Formato: POSITION:playerID:x:y:velX:velY
-        string posMessage = string.Format("POSITION:{0}:{1:F3}:{2:F3}:{3:F3}:{4:F3}",
+        PositionMessage posMsg = new PositionMessage(
             playerID,
             transform.position.x,
             transform.position.y,
@@ -76,16 +74,20 @@ public class NetworkPlayer : MonoBehaviour
             rb.linearVelocity.y
         );
 
-        udpClient.SendMessage(posMessage);
+        byte[] data = NetworkSerializer.Serialize(posMsg);
+        if (data != null)
+        {
+            udpClient.SendBytes(data);
+        }
     }
 
+    // Update target position for remote player interpolation
     public void UpdatePosition(Vector3 position, Vector2 velocity)
     {
         targetPosition = position;
         targetVelocity = velocity;
     }
 
-    // Para serialización JSON
     [System.Serializable]
     public class PlayerData
     {
@@ -115,12 +117,18 @@ public class NetworkPlayer : MonoBehaviour
         }
     }
 
+    // Get current player data for saving
     public PlayerData GetPlayerData()
     {
         if (rb == null) rb = GetComponent<Rigidbody2D>();
-        return new PlayerData(playerID, transform.position, rb != null ? rb.linearVelocity : Vector2.zero);
+        return new PlayerData(
+            playerID,
+            transform.position,
+            rb != null ? rb.linearVelocity : Vector2.zero
+        );
     }
 
+    // Load saved player data
     public void LoadPlayerData(PlayerData data)
     {
         transform.position = data.GetPosition();
