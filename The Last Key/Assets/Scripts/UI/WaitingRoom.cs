@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -11,6 +12,9 @@ public class WaitingRoom : MonoBehaviour
     public Button sendButton;
     public TextMeshProUGUI roomInfoText;
 
+    public Button playButton;
+    public int minPlayersToStart = 2; 
+
     // Data structures to store player and chat information
     private List<string> connectedPlayers = new List<string>();
     private List<string> chatMessages = new List<string>();
@@ -18,6 +22,12 @@ public class WaitingRoom : MonoBehaviour
     private void Start()
     {
         AddChatMessage("System", "Welcome to the waiting room!");
+
+        if (playButton != null)
+        {
+            playButton.interactable = false;
+            playButton.onClick.AddListener(OnPlayButtonClicked);
+        }
 
         // If this is a client (not the server), add the player's username to the room
         if (!IsServer())
@@ -27,6 +37,17 @@ public class WaitingRoom : MonoBehaviour
                 AddPlayer(myUsername);
         }
         UpdateInfo();
+    }
+
+    public void OnPlayButtonClicked()
+    {
+        UDPClient udpClient = FindAnyObjectByType<UDPClient>();
+        if (udpClient != null)
+        {
+            SimpleMessage startMsg = new SimpleMessage("START_GAME", "");
+            byte[] data = NetworkSerializer.Serialize(startMsg);
+            udpClient.SendBytes(data);
+        }
     }
 
     private string GetMyUsername()
@@ -50,6 +71,30 @@ public class WaitingRoom : MonoBehaviour
         }
 
         roomInfoText.text = "Room: " + connectedPlayers.Count + " players";
+
+        UpdatePlayButton();
+    }
+
+    private void UpdatePlayButton()
+    {
+        if (playButton != null)
+        { 
+            bool canStart = connectedPlayers.Count >= minPlayersToStart;
+            playButton.interactable = canStart;
+
+            TextMeshProUGUI buttonText = playButton.GetComponentInChildren<TextMeshProUGUI>();
+            if (buttonText != null)
+            {
+                if (canStart)
+                {
+                    buttonText.text = "START GAME"; 
+                }
+                else
+                {
+                    buttonText.text = "WAITING " + connectedPlayers.Count+ " / " + minPlayersToStart;
+                }
+            }
+        }
     }
 
     public void SendChatMessage()
@@ -103,5 +148,6 @@ public class WaitingRoom : MonoBehaviour
     public void ClearPlayers()
     {
         connectedPlayers.Clear();
+        UpdateInfo();
     }
 }

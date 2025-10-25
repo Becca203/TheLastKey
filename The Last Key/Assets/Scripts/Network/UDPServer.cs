@@ -109,9 +109,49 @@ public class UDPServer : MonoBehaviour
             case "POSITION":
                 ProcessPositionMessage(buffer, length, client);
                 break;
+            case "START_GAME":
+                ProcessStartGameRequest();
+                break;
             default:
                 Debug.LogWarning("Unknown message type: " + msgType);
                 break;
+        }
+    }
+
+    private void ProcessStartGameRequest()
+    {
+        lock (clientsLock)
+        {
+            if (connectedClients.Count >= 2)
+            {
+                Debug.Log("Starting game for all clients...");
+                gameStarted = true;
+
+                int playerID = 1;
+                foreach (var client in connectedClients)
+                {
+                    if (!string.IsNullOrEmpty(client.username))
+                    {
+                        GameStartMessage gameStartMsg = new GameStartMessage(playerID, connectedClients.Count);
+                        byte[] data = NetworkSerializer.Serialize(gameStartMsg);
+
+                        try
+                        {
+                            serverSocket.SendTo(data, client.endpoint);
+                            Debug.Log("Sent GAME_START to " + client.username + " as Player " + playerID);
+                        }
+                        catch (Exception e)
+                        {
+                            Debug.LogError("Error sending game start to " + client.username + ": " + e.Message);
+                        }
+                        playerID++;
+                    }
+                }
+            }
+            else
+            {
+                Debug.LogWarning("Not enough players to start the game");
+            }
         }
     }
 
@@ -130,8 +170,6 @@ public class UDPServer : MonoBehaviour
 
                 SimpleMessage joinedMsg = new SimpleMessage("PLAYER_JOINED", usernameMsg.content);
                 BroadcastMessage(joinedMsg, client);
-
-                CheckAndStartGame();
             }
         }
     }
@@ -184,35 +222,20 @@ public class UDPServer : MonoBehaviour
     {
         lock (clientsLock)
         {
-            int connectedPlayerCount = connectedClients.Count;
-            if (connectedPlayerCount == 2 && !gameStarted)
+            int connectedPlayerCount = 0;
+            foreach (var client in connectedClients)
             {
-                gameStarted = true;
-                Debug.Log("Starting game with 2 players");
-
-                foreach (var client in connectedClients)
+                if (!string.IsNullOrEmpty(client.username))
                 {
-                    if (!string.IsNullOrEmpty(client.username))
-                    {
-                        GameStartMessage startMsg = new GameStartMessage(client.playerID, 2);
-                        byte[] data = NetworkSerializer.Serialize(startMsg);
-
-                        try
-                        {
-                            serverSocket.SendTo(data, client.endpoint);
-                            Debug.Log("Sent GAME_START to " + client.username + " with ID " + client.playerID);
-                        }
-                        catch (Exception e)
-                        {
-                            Debug.LogError("Error sending game start to " + client.username + ": " + e.Message);
-                        }
-                    }
+                    connectedPlayerCount++;
                 }
             }
-            else if (connectedPlayerCount < 2 && gameStarted)
+
+            if (connectedPlayerCount < 2 && gameStarted)
             {
                 gameStarted = false;
-                SimpleMessage cancelMsg = new SimpleMessage("GAME_CANCEL");
+                Debug.Log("Game cancelled - not enough players");
+                SimpleMessage cancelMsg = new SimpleMessage("GAME_CANCEL", "");
                 BroadcastMessage(cancelMsg);
             }
         }
@@ -230,6 +253,7 @@ public class UDPServer : MonoBehaviour
                 {
                     SimpleMessage leftMsg = new SimpleMessage("PLAYER_LEFT", disconnectedClient.username);
                     BroadcastMessage(leftMsg);
+                    SendUserList();
                     CheckAndStartGame();
                 }
             }

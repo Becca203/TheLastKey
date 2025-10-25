@@ -56,6 +56,7 @@ public class UDPClient : MonoBehaviour
         if (shouldLoadWaitingRoom)
         {
             shouldLoadWaitingRoom = false;
+            waitingRoom = null; 
             SceneManager.LoadScene("WaitingRoom");
         }
 
@@ -238,6 +239,14 @@ public class UDPClient : MonoBehaviour
         if (playerListMsg != null)
         {
             WaitingRoom room = GetWaitingRoomManager();
+            int retries = 0;
+            while (room == null && retries < 10)
+            {
+                Thread.Sleep(100); 
+                room = GetWaitingRoomManager();
+                retries++;
+            }
+
             if (room != null)
             {
                 room.ClearPlayers();
