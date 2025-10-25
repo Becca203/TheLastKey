@@ -235,7 +235,7 @@ public class UDPClient : MonoBehaviour
                     {
                         assignedPlayerID = playerID;
                         shouldSetPlayerID = true;
-                        Debug.Log($"Game starting! Assigned as Player {playerID}");
+                        Debug.Log("Game starting! Assigned as Player " + playerID);
                     }
                     shouldLoadGameScene = true;
                 }

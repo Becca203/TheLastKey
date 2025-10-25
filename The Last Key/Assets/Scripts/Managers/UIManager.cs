@@ -102,7 +102,7 @@ public class GameUIController : MonoBehaviour
 
         if (gameManager != null)
         {
-            info += $"Local Player: Player {gameManager.localPlayerID}\n\n";
+            info += "Local Player: Player " + gameManager.localPlayerID + "\n\n";
         }
 
         // Mostrar info de todos los jugadores
@@ -110,7 +110,7 @@ public class GameUIController : MonoBehaviour
         foreach (var player in players)
         {
             Rigidbody2D rb = player.GetComponent<Rigidbody2D>();
-            info += $"Player {player.playerID} ({(player.isLocalPlayer ? "LOCAL" : "REMOTE")})\n";
+            info += "Player " + player.playerID + "( " + (player.isLocalPlayer ? "LOCAL" : "REMOTE") + ")\n";
             info += $"Pos: {player.transform.position:F2}\n";
             if (rb != null)
             {

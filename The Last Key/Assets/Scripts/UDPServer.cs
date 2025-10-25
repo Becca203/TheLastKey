@@ -164,11 +164,11 @@ public class UDPServer : MonoBehaviour
                         try
                         {
                             serverSocket.SendTo(data, client.endpoint);
-                            Debug.Log($"Sent GAME_START to {client.username} with ID {client.playerID}");
+                            Debug.Log("Sent GAME_START to " + client.username + " with ID " + client.playerID);
                         }
                         catch (Exception e)
                         {
-                            Debug.LogError($"Error sending game start to {client.username}: " + e.Message);
+                            Debug.LogError("Error sending game start to " + client.username + ": " + e.Message);
                         }
                     }
                 }
@@ -278,7 +278,7 @@ public class UDPServer : MonoBehaviour
             int newPlayerID = connectedClients.Count + 1;
             ClientInfo newClient = new ClientInfo(clientEndPoint, newPlayerID);
             connectedClients.Add(newClient);
-            Debug.Log($"New client registered: {clientEndPoint} as Player {newPlayerID}");
+            Debug.Log("New client registered: " + clientEndPoint + " as Player " + newPlayerID);
             return newClient;
         }
     }

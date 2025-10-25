@@ -41,7 +41,7 @@ public class GameManager : MonoBehaviour
         udpClient = FindAnyObjectByType<UDPClient>();
         if (udpClient == null)
         {
-            Debug.LogError("No se encontró UDPClient!");
+            Debug.LogError("UDPClient not found!");
             return;
         }
 
@@ -122,7 +122,7 @@ public class GameManager : MonoBehaviour
         SetupLocalPlayer();
         SetupRemotePlayer();
 
-        Debug.Log($"Players initialized. Local: Player{localPlayerID}");
+        Debug.Log("Players initialized. Local: Player " + localPlayerID);
     }
 
     private void SetupLocalPlayer()

@@ -24,7 +24,7 @@ public class NetworkPlayer : MonoBehaviour
 
         if (udpClient == null)
         {
-            Debug.LogError("NetworkPlayer: No se encontró UDPClient!");
+            Debug.LogError("NetworkPlayer: UDPClient not found!");
         }
 
         targetPosition = transform.position;

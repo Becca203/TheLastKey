@@ -101,7 +101,7 @@ public class GameSaveSystem : MonoBehaviour
                     if (player.playerID == playerData.playerID)
                     {
                         player.LoadPlayerData(playerData);
-                        Debug.Log($"Loaded data for Player {playerData.playerID}: Pos({playerData.posX}, {playerData.posY})");
+                        Debug.Log("Loaded data for Player " + playerData.playerID + ": Pos( " + playerData.posX + ", " + playerData.posY + " )");
                         break;
                     }
                 }
@@ -140,7 +140,7 @@ public class GameSaveSystem : MonoBehaviour
     }
 
     // Para testing: Auto-guardar cada X segundos (opcional)
-    [Header("Auto Save (Optional)")]
+    [Header("Auto Save")]
     public bool enableAutoSave = false;
     public float autoSaveInterval = 30f; // segundos
     private float autoSaveTimer = 0f;
