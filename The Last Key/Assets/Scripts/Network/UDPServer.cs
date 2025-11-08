@@ -112,9 +112,24 @@ public class UDPServer : MonoBehaviour
             case "START_GAME":
                 ProcessStartGameRequest();
                 break;
+            case "GAME_OVER":
+                ProcessGameOverMessage(buffer, length);
+                break;
             default:
                 Debug.LogWarning("Unknown message type: " + msgType);
                 break;
+        }
+    }
+
+    private void ProcessGameOverMessage(byte[] buffer, int length)
+    {
+        SimpleMessage gameOverMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
+        if (gameOverMsg != null)
+        {
+            Debug.Log("Server received GAME_OVER - Winner: Player " + gameOverMsg.content);
+            BroadcastMessage(gameOverMsg);
+            gameStarted = false;
+            Debug.Log("Loading GameOverScene for Player " + gameOverMsg.content);
         }
     }
 

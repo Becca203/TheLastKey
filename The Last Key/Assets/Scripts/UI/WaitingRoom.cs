@@ -115,11 +115,24 @@ public class WaitingRoom : MonoBehaviour
 
     public void AddChatMessage(string sender, string message)
     {
-        chatMessages.Add(sender + ": " + message);
+        string formattedMessage;
+
+        if (sender == "System")
+        {
+            formattedMessage = "<color=yellow>[System]</color>: " + message;
+        }
+        else
+        {
+            formattedMessage = "<color=purple>" + sender + "</color>: " + message;
+        }
+
+        chatMessages.Add(formattedMessage);
+
         if (chatMessages.Count > 10)
         {
-            chatMessages.RemoveAt(0); 
+            chatMessages.RemoveAt(0);
         }
+
         chatText.text = string.Join("\n", chatMessages);
     }
 

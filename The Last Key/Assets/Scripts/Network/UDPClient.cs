@@ -20,8 +20,10 @@ public class UDPClient : MonoBehaviour
     private WaitingRoom waitingRoom;
     private bool shouldLoadWaitingRoom = false;
     private bool shouldLoadGameScene = false;
+    private bool shouldLoadGameOverScene = false; 
 
     private int assignedPlayerID = 0;
+    private int winnerID = 0;
     private bool shouldSetPlayerID = false;
 
     private struct PositionUpdate
@@ -64,6 +66,14 @@ public class UDPClient : MonoBehaviour
         {
             shouldLoadGameScene = false;
             SceneManager.LoadScene("GameScene");
+        }
+
+        if (shouldLoadGameOverScene)
+        {
+            shouldLoadGameOverScene = false;
+            PlayerPrefs.SetInt("WinnerPlayerID", winnerID);
+            PlayerPrefs.Save();
+            SceneManager.LoadScene("GameOverScene");
         }
 
         if (shouldSetPlayerID)
@@ -216,9 +226,26 @@ public class UDPClient : MonoBehaviour
             case "POSITION":
                 ProcessPositionMessage(buffer, length);
                 break;
+            case "GAME_OVER":
+                ProcessGameOverMessage(buffer, length);
+                break;
             default:
                 Debug.LogWarning("Unknown message type: " + msgType);
                 break;
+        }
+    }
+
+    private void ProcessGameOverMessage(byte[] buffer, int length)
+    {
+        SimpleMessage gameOverMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
+        if (gameOverMsg != null)
+        {
+            if (int.TryParse(gameOverMsg.content, out int id))
+            {
+                Debug.Log("Game over! Player " + id + " wins!");
+                winnerID = id;
+                shouldLoadGameOverScene = true;
+            }
         }
     }
 
