@@ -1,229 +1,93 @@
-using System;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
-/// <summary>
-/// Versión adaptada que combina el controlador de Tarodev con el sistema de llaves
-/// </summary>
-[RequireComponent(typeof(Rigidbody2D), typeof(Collider2D))]
-public class PlayerMovement2D : MonoBehaviour, IPlayerController
+public class PlayerMovement2D : MonoBehaviour
 {
-    [Header("Tarodev Controller")]
-    [SerializeField] private ScriptableStats _stats;
-    
-    [Header("Key System")]
+    [Header("Movement")]
+    [SerializeField] private float movementSpeed = 8f;
+    [SerializeField] private float movementSmoothing = 0.1f;
+
+    [Header("Jump")]
+    [SerializeField] private float jumpForce = 12f;
+    [SerializeField] private float fallGravity = 2.5f;
+    [SerializeField] private float lowJumpGravity = 2f;
+    [SerializeField] private Transform groundCheck;
+    [SerializeField] private float groundCheckRadius = 0.2f;
+    [SerializeField] private LayerMask groundLayer;
+
+    [Header("Overlay")]
     [SerializeField] private GameObject keyOverlay;
-    [HideInInspector] public bool hasKey = false;
+    public bool hasKey = false;
 
-    private Rigidbody2D _rb;
-    private CapsuleCollider2D _col;
-    private FrameInput _frameInput;
-    private Vector2 _frameVelocity;
-    private bool _cachedQueryStartInColliders;
+    private Rigidbody2D rb;
+    private float horizontalMovement;
+    private Vector2 currentVelocity;
+    private bool isGrounded;
 
-    #region Interface
-
-    public Vector2 FrameInput => _frameInput.Move;
-    public event Action<bool, float> GroundedChanged;
-    public event Action Jumped;
-
-    #endregion
-
-    private float _time;
-
-    private void Awake()
+    void Start()
     {
-        _rb = GetComponent<Rigidbody2D>();
-        _col = GetComponent<CapsuleCollider2D>();
-
-        // FUERZA configuración correcta
-        _rb.gravityScale = 0f;
-        _rb.linearDamping = 0f;
-        _rb.angularDamping = 0f;
-        _rb.constraints = RigidbodyConstraints2D.FreezeRotation;
-
-        _cachedQueryStartInColliders = Physics2D.queriesStartInColliders;
-        
+        rb = GetComponent<Rigidbody2D>();
         if (keyOverlay != null)
             keyOverlay.SetActive(false);
     }
 
-    private void Update()
+    void Update()
     {
-        _time += Time.deltaTime;
-        GatherInput();
-    }
+        // Movement input using the new Input System
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null) return;
 
-    private void GatherInput()
-    {
-        _frameInput = new FrameInput
-        {
-            JumpDown = Input.GetButtonDown("Jump") || Input.GetKeyDown(KeyCode.Space),
-            JumpHeld = Input.GetButton("Jump") || Input.GetKey(KeyCode.Space),
-            Move = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"))
-        };
+        horizontalMovement = 0f;
 
-        if (_stats.SnapInput)
+        if (keyboard.aKey.isPressed)
+            horizontalMovement = -1f;
+        else if (keyboard.dKey.isPressed)
+            horizontalMovement = 1f;
+
+        isGrounded = Physics2D.OverlapCircle(groundCheck.position, groundCheckRadius, groundLayer);
+
+        // Jump input
+        if (keyboard.spaceKey.wasPressedThisFrame && isGrounded)
         {
-            _frameInput.Move.x = Mathf.Abs(_frameInput.Move.x) < _stats.HorizontalDeadZoneThreshold ? 0 : Mathf.Sign(_frameInput.Move.x);
-            _frameInput.Move.y = Mathf.Abs(_frameInput.Move.y) < _stats.VerticalDeadZoneThreshold ? 0 : Mathf.Sign(_frameInput.Move.y);
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, jumpForce);
         }
 
-        if (_frameInput.JumpDown)
+        // Better gravity for more realistic jump
+        if (rb.linearVelocity.y < 0)
         {
-            _jumpToConsume = true;
-            _timeJumpWasPressed = _time;
+            rb.linearVelocity += Vector2.up * Physics2D.gravity.y * (fallGravity - 1) * Time.deltaTime;
         }
-    }
-
-    private void FixedUpdate()
-    {
-        CheckCollisions();
-
-        HandleJump();
-        HandleDirection();
-        HandleGravity();
-        
-        ApplyMovement();
-    }
-
-    #region Collisions
-    
-    private float _frameLeftGrounded = float.MinValue;
-    private bool _grounded;
-
-    private void CheckCollisions()
-    {
-        Physics2D.queriesStartInColliders = false;
-
-        // Ground and Ceiling
-        bool groundHit = Physics2D.CapsuleCast(_col.bounds.center, _col.size, _col.direction, 0, Vector2.down, _stats.GrounderDistance, ~_stats.PlayerLayer);
-        bool ceilingHit = Physics2D.CapsuleCast(_col.bounds.center, _col.size, _col.direction, 0, Vector2.up, _stats.GrounderDistance, ~_stats.PlayerLayer);
-
-        // Hit a Ceiling
-        if (ceilingHit) _frameVelocity.y = Mathf.Min(0, _frameVelocity.y);
-
-        // Landed on the Ground
-        if (!_grounded && groundHit)
+        else if (rb.linearVelocity.y > 0 && !keyboard.spaceKey.isPressed)
         {
-            _grounded = true;
-            _coyoteUsable = true;
-            _bufferedJumpUsable = true;
-            _endedJumpEarly = false;
-            GroundedChanged?.Invoke(true, Mathf.Abs(_frameVelocity.y));
-        }
-        // Left the Ground
-        else if (_grounded && !groundHit)
-        {
-            _grounded = false;
-            _frameLeftGrounded = _time;
-            GroundedChanged?.Invoke(false, 0);
-        }
-
-        Physics2D.queriesStartInColliders = _cachedQueryStartInColliders;
-    }
-
-    #endregion
-
-    #region Jumping
-
-    private bool _jumpToConsume;
-    private bool _bufferedJumpUsable;
-    private bool _endedJumpEarly;
-    private bool _coyoteUsable;
-    private float _timeJumpWasPressed;
-
-    private bool HasBufferedJump => _bufferedJumpUsable && _time < _timeJumpWasPressed + _stats.JumpBuffer;
-    private bool CanUseCoyote => _coyoteUsable && !_grounded && _time < _frameLeftGrounded + _stats.CoyoteTime;
-
-    private void HandleJump()
-    {
-        if (!_endedJumpEarly && !_grounded && !_frameInput.JumpHeld && _rb.linearVelocity.y > 0) _endedJumpEarly = true;
-
-        if (!_jumpToConsume && !HasBufferedJump) return;
-
-        if (_grounded || CanUseCoyote) ExecuteJump();
-
-        _jumpToConsume = false;
-    }
-
-    private void ExecuteJump()
-    {
-        _endedJumpEarly = false;
-        _timeJumpWasPressed = 0;
-        _bufferedJumpUsable = false;
-        _coyoteUsable = false;
-        _frameVelocity.y = _stats.JumpPower;
-        Jumped?.Invoke();
-    }
-
-    #endregion
-
-    #region Horizontal
-
-    private void HandleDirection()
-    {
-        if (_frameInput.Move.x == 0)
-        {
-            var deceleration = _grounded ? _stats.GroundDeceleration : _stats.AirDeceleration;
-            _frameVelocity.x = Mathf.MoveTowards(_frameVelocity.x, 0, deceleration * Time.fixedDeltaTime);
-        }
-        else
-        {
-            _frameVelocity.x = Mathf.MoveTowards(_frameVelocity.x, _frameInput.Move.x * _stats.MaxSpeed, _stats.Acceleration * Time.fixedDeltaTime);
+            rb.linearVelocity += Vector2.up * Physics2D.gravity.y * (lowJumpGravity - 1) * Time.deltaTime;
         }
     }
 
-    #endregion
-
-    #region Gravity
-
-    private void HandleGravity()
+    void FixedUpdate()
     {
-        if (_grounded && _frameVelocity.y <= 0f)
-        {
-            _frameVelocity.y = _stats.GroundingForce;
-        }
-        else
-        {
-            var inAirGravity = _stats.FallAcceleration;
-            if (_endedJumpEarly && _frameVelocity.y > 0) inAirGravity *= _stats.JumpEndEarlyGravityModifier;
-            _frameVelocity.y = Mathf.MoveTowards(_frameVelocity.y, -_stats.MaxFallSpeed, inAirGravity * Time.fixedDeltaTime);
-        }
+        // Smoothed horizontal movement
+        float targetVelocity = horizontalMovement * movementSpeed;
+        rb.linearVelocity = Vector2.SmoothDamp(
+            rb.linearVelocity,
+            new Vector2(targetVelocity, rb.linearVelocity.y),
+            ref currentVelocity,
+            movementSmoothing
+        );
     }
 
-    #endregion
-
-    private void ApplyMovement() => _rb.linearVelocity = _frameVelocity;
-
-    #region Key System
-
+    void OnDrawGizmosSelected()
+    {
+        // Visualize groundCheck in the editor
+        if (groundCheck != null)
+        {
+            Gizmos.color = Color.red;
+            Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);
+        }
+    }
     public void SetHasKey(bool value)
     {
         hasKey = value;
         if (keyOverlay != null)
             keyOverlay.SetActive(value);
     }
-
-    #endregion
-
-#if UNITY_EDITOR
-    private void OnValidate()
-    {
-        if (_stats == null) Debug.LogWarning("Please assign a ScriptableStats asset to the Player Controller's Stats slot", this);
-    }
-#endif
-}
-
-public struct FrameInput
-{
-    public bool JumpDown;
-    public bool JumpHeld;
-    public Vector2 Move;
-}
-
-public interface IPlayerController
-{
-    public event Action<bool, float> GroundedChanged;
-    public event Action Jumped;
-    public Vector2 FrameInput { get; }
 }
