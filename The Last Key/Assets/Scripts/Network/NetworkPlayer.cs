@@ -9,6 +9,10 @@ public class NetworkPlayer : MonoBehaviour
     [SerializeField] private float sendRate = 20f;
     [SerializeField] private float interpolationSpeed = 10f;
 
+    [Header("KeyStatus")]
+    [SerializeField] public bool hasKey = false;
+    [SerializeField] private GameObject keyOverlay;
+
     private Rigidbody2D rb;
     private UDPClient udpClient;
     private float sendTimer = 0f;
@@ -132,5 +136,12 @@ public class NetworkPlayer : MonoBehaviour
         {
             rb.linearVelocity = data.GetVelocity();
         }
+    }
+
+    public void SetHasKey(bool value)
+    {
+        hasKey = value;
+        if (keyOverlay != null)
+            keyOverlay.SetActive(value);
     }
 }

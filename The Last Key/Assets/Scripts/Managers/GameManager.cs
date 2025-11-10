@@ -144,4 +144,14 @@ public class GameManager : MonoBehaviour
             remoteNetworkPlayer.UpdatePosition(position, velocity);
         }
     }
+    public NetworkPlayer FindPlayerByID(int id)
+    {
+        if (localNetworkPlayer != null && localNetworkPlayer.playerID == id)
+            return localNetworkPlayer;
+
+        if (remoteNetworkPlayer != null && remoteNetworkPlayer.playerID == id)
+            return remoteNetworkPlayer;
+
+        return null;
+    }
 }

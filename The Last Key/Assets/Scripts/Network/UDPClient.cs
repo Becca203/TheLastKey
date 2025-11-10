@@ -229,6 +229,12 @@ public class UDPClient : MonoBehaviour
             case "GAME_OVER":
                 ProcessGameOverMessage(buffer, length);
                 break;
+            case "UPDATE_KEY_STATE":
+                ProcessUpdateKeyState(buffer, length);
+                break;
+            case "HIDE_KEY":
+                ProcessHideKey(buffer, length);
+                break;
             default:
                 Debug.LogWarning("Unknown message type: " + msgType);
                 break;
@@ -350,6 +356,32 @@ public class UDPClient : MonoBehaviour
         }
     }
 
+    private void ProcessUpdateKeyState(byte[] buffer, int length)
+    {
+        SimpleMessage updateMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
+        if (updateMsg != null && int.TryParse(updateMsg.content, out int playerID))
+        {
+            Debug.Log("Player " + playerID + " has the key (sync)");
+            GameManager gameManager = GameManager.Instance;
+            if (gameManager != null)
+            {
+                NetworkPlayer player = gameManager.FindPlayerByID(playerID);
+                if (player != null)
+                {
+                    player.SetHasKey(true);
+                }
+            }
+        }
+    }
+    private void ProcessHideKey(byte[] buffer, int length)
+    {
+        Debug.Log("Received HIDE_KEY message, disabling key object");
+        KeyBehaviour key = FindAnyObjectByType<KeyBehaviour>();
+        if (key != null)
+        {
+            key.gameObject.SetActive(false);
+        }
+    }
     private WaitingRoom GetWaitingRoomManager()
     {
         if (waitingRoom == null)

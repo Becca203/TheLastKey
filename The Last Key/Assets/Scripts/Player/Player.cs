@@ -15,6 +15,10 @@ public class PlayerMovement2D : MonoBehaviour
     [SerializeField] private float groundCheckRadius = 0.2f;
     [SerializeField] private LayerMask groundLayer;
 
+    [Header("Overlay")]
+    [SerializeField] private GameObject keyOverlay;
+    public bool hasKey = false;
+
     private Rigidbody2D rb;
     private float horizontalMovement;
     private Vector2 currentVelocity;
@@ -23,6 +27,8 @@ public class PlayerMovement2D : MonoBehaviour
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
+        if (keyOverlay != null)
+            keyOverlay.SetActive(false);
     }
 
     void Update()
@@ -77,5 +83,11 @@ public class PlayerMovement2D : MonoBehaviour
             Gizmos.color = Color.red;
             Gizmos.DrawWireSphere(groundCheck.position, groundCheckRadius);
         }
+    }
+    public void SetHasKey(bool value)
+    {
+        hasKey = value;
+        if (keyOverlay != null)
+            keyOverlay.SetActive(value);
     }
 }

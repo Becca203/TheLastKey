@@ -11,10 +11,14 @@ public class DoorTrigger : MonoBehaviour
         if (collision.CompareTag(winnerTag))
         {
             NetworkPlayer networkPlayer = collision.GetComponent<NetworkPlayer>();
-            if (networkPlayer != null && networkPlayer.isLocalPlayer)
+            if (networkPlayer != null && networkPlayer.isLocalPlayer && networkPlayer.hasKey)
             {
                 Debug.Log("Local player reached the door! Player " + networkPlayer.playerID + " wins!");
                 SendGameOverMessage(networkPlayer.playerID);
+            }
+            else
+            {
+                Debug.Log("Player doesnt have the key... Stupid.");
             }
         }
     }

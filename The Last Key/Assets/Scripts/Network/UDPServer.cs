@@ -115,6 +115,9 @@ public class UDPServer : MonoBehaviour
             case "GAME_OVER":
                 ProcessGameOverMessage(buffer, length);
                 break;
+            case "KEY_COLLECTED":
+                ProcessKeyCollectedMessage(buffer, length, client);
+                break;
             default:
                 Debug.LogWarning("Unknown message type: " + msgType);
                 break;
@@ -207,7 +210,22 @@ public class UDPServer : MonoBehaviour
             ForwardPositionUpdate(posMsg, sender);
         }
     }
+    private void ProcessKeyCollectedMessage(byte[] buffer, int length, ClientInfo client)
+    {
+        SimpleMessage keyMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
+        if (keyMsg != null)
+        {
+            Debug.Log("Server received KEY_COLLECTED from Player " + keyMsg.content);
 
+            // Reenviar a todos los clientes que ese jugador tiene la llave
+            SimpleMessage updateMsg = new SimpleMessage("UPDATE_KEY_STATE", keyMsg.content);
+            BroadcastMessage(updateMsg);
+
+            // También avisar que la llave debe desaparecer
+            SimpleMessage hideMsg = new SimpleMessage("HIDE_KEY", "");
+            BroadcastMessage(hideMsg);
+        }
+    }
     private void ForwardPositionUpdate(PositionMessage posMsg, ClientInfo sender)
     {
         byte[] data = NetworkSerializer.Serialize(posMsg);
