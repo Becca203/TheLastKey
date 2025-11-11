@@ -5,20 +5,30 @@ using UnityEngine.SceneManagement;
 public class DoorTrigger : MonoBehaviour
 {
     [SerializeField] private string winnerTag = "Player";
+    private bool gameEnded = false;
 
     private void OnTriggerEnter2D(Collider2D collision)
     {
+        if (gameEnded) return;
+
         if (collision.CompareTag(winnerTag))
         {
             NetworkPlayer networkPlayer = collision.GetComponent<NetworkPlayer>();
-            if (networkPlayer != null && networkPlayer.isLocalPlayer && networkPlayer.hasKey)
+            
+            if (networkPlayer != null && networkPlayer.hasKey)
             {
-                Debug.Log("Local player reached the door! Player " + networkPlayer.playerID + " wins!");
-                SendGameOverMessage(networkPlayer.playerID);
+                Debug.Log("Player " + networkPlayer.playerID + " reached the door with the key!");
+                
+                // Solo el jugador local envía el mensaje
+                if (networkPlayer.isLocalPlayer)
+                {
+                    gameEnded = true;
+                    SendGameOverMessage(networkPlayer.playerID);
+                }
             }
-            else
+            else if (networkPlayer != null)
             {
-                Debug.Log("Player doesnt have the key... Stupid.");
+                Debug.Log("Player " + networkPlayer.playerID + " doesn't have the key!");
             }
         }
     }
@@ -34,21 +44,12 @@ public class DoorTrigger : MonoBehaviour
             if (data != null)
             {
                 udpClient.SendBytes(data);
-                Debug.Log("Sent GAME_OVER message to server");
-                LoadGameOverScene(playerID);
+                Debug.Log("Sent GAME_OVER message to server for Player " + playerID);
             }
         }
         else
         {
             Debug.LogError("UDPClient not found!");
         }
-    }
-
-    private void LoadGameOverScene(int playerID)
-    {
-        PlayerPrefs.SetInt("WinnerPlayerID", playerID);
-        PlayerPrefs.Save();
-        
-        SceneManager.LoadScene("GameOverScene");
     }
 }

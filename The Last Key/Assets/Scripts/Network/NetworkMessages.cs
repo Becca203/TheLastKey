@@ -87,3 +87,19 @@ public class SimpleMessage : NetworkMessage
         content = data;
     }
 }
+
+[Serializable]
+public class KeyTransferMessage : NetworkMessage
+{
+    public int fromPlayerID;
+    public int toPlayerID;
+
+    public KeyTransferMessage() : base("KEY_TRANSFER") { }
+
+    public KeyTransferMessage(int from, int to) : base("KEY_TRANSFER")
+    {
+        fromPlayerID = from;
+        toPlayerID = to;
+    }
+}
+// ELIMINA TODA LA CLASE PushMessage de aquí

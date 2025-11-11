@@ -280,6 +280,9 @@ public class UDPClient : MonoBehaviour
             case "HIDE_KEY":
                 ProcessHideKey(buffer, length);
                 break;
+            case "KEY_TRANSFER":
+                ProcessKeyTransferMessage(buffer, length);
+                break;
             default:
                 Debug.LogWarning("[CLIENT] Unknown message type: " + msgType);
                 break;
@@ -427,6 +430,33 @@ public class UDPClient : MonoBehaviour
         if (key != null)
         {
             key.gameObject.SetActive(false);
+        }
+    }
+
+    private void ProcessKeyTransferMessage(byte[] buffer, int length)
+    {
+        KeyTransferMessage transferMsg = NetworkSerializer.Deserialize<KeyTransferMessage>(buffer, length);
+        if (transferMsg != null)
+        {
+            Debug.Log("[CLIENT] Key transferred from Player " + transferMsg.fromPlayerID + " to Player " + transferMsg.toPlayerID);
+            
+            GameManager gameManager = GameManager.Instance;
+            if (gameManager != null)
+            {
+                NetworkPlayer fromPlayer = gameManager.FindPlayerByID(transferMsg.fromPlayerID);
+                NetworkPlayer toPlayer = gameManager.FindPlayerByID(transferMsg.toPlayerID);
+
+                if (fromPlayer != null && toPlayer != null)
+                {
+                    fromPlayer.SetHasKey(false);
+                    toPlayer.SetHasKey(true);
+                    Debug.Log("[CLIENT] Key successfully transferred");
+                }
+                else
+                {
+                    Debug.LogWarning("[CLIENT] Could not find players for key transfer");
+                }
+            }
         }
     }
 

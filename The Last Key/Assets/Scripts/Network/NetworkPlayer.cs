@@ -12,6 +12,10 @@ public class NetworkPlayer : MonoBehaviour
     [Header("Key Status")]
     public bool hasKey = false;
 
+    [Header("Push System")]
+    public bool isPushed = false;
+    private float pushRecoveryTime = 0f;
+
     private Rigidbody2D rb;
     private UDPClient udpClient;
     private PlayerMovement2D playerMovement;
@@ -41,6 +45,12 @@ public class NetworkPlayer : MonoBehaviour
 
     void Update()
     {
+        if (isPushed && Time.time >= pushRecoveryTime)
+        {
+            isPushed = false;
+            Debug.Log("Player " + playerID + " recovered from push");
+        }
+
         if (isLocalPlayer)
         {
             sendTimer += Time.deltaTime;
@@ -52,19 +62,22 @@ public class NetworkPlayer : MonoBehaviour
         }
         else
         {
-            transform.position = Vector3.Lerp(
-                transform.position,
-                targetPosition,
-                interpolationSpeed * Time.deltaTime
-            );
-
-            if (rb != null)
+            if (!isPushed)
             {
-                rb.linearVelocity = Vector2.Lerp(
-                    rb.linearVelocity,
-                    targetVelocity,
+                transform.position = Vector3.Lerp(
+                    transform.position,
+                    targetPosition,
                     interpolationSpeed * Time.deltaTime
                 );
+
+                if (rb != null)
+                {
+                    rb.linearVelocity = Vector2.Lerp(
+                        rb.linearVelocity,
+                        targetVelocity,
+                        interpolationSpeed * Time.fixedDeltaTime
+                    );
+                }
             }
         }
     }
@@ -94,25 +107,40 @@ public class NetworkPlayer : MonoBehaviour
         targetVelocity = velocity;
     }
 
-    // Updates the key status and visual overlay
     public void SetHasKey(bool value)
     {
+        bool previousValue = hasKey;
         hasKey = value;
 
         if (playerMovement != null)
         {
             playerMovement.SetHasKey(value);
-            Debug.Log("Updated key overlay for Player " + playerID + ": " + value);
+            Debug.Log("Player " + playerID + " hasKey changed from " + previousValue + " to " + value);
         }
     }
 
-    // Only the local player can collect the key
     public void CollectKey()
     {
         if (!isLocalPlayer) return;
 
         SetHasKey(true);
         SendKeyCollectedMessage();
+    }
+
+    public void StealKey(int targetPlayerID)
+    {
+        if (!isLocalPlayer) return;
+
+        Debug.Log("Player " + playerID + " stealing key from Player " + targetPlayerID);
+        SendKeyTransferMessage(targetPlayerID, playerID);
+    }
+
+    public void StartPush(float duration)
+    {
+        isPushed = true;
+        pushRecoveryTime = Time.time + duration;
+        
+        Debug.Log("Player " + playerID + " is pushed for " + duration + " seconds");
     }
 
     private void SendKeyCollectedMessage()
@@ -130,6 +158,24 @@ public class NetworkPlayer : MonoBehaviour
         {
             udpClient.SendBytes(data);
             Debug.Log("KEY_COLLECTED message sent for Player " + playerID);
+        }
+    }
+
+    private void SendKeyTransferMessage(int fromPlayer, int toPlayer)
+    {
+        if (udpClient == null)
+        {
+            Debug.LogError("UDPClient not found!");
+            return;
+        }
+
+        KeyTransferMessage transferMsg = new KeyTransferMessage(fromPlayer, toPlayer);
+        byte[] data = NetworkSerializer.Serialize(transferMsg);
+
+        if (data != null)
+        {
+            udpClient.SendBytes(data);
+            Debug.Log("KEY_TRANSFER sent: from Player " + fromPlayer + " to Player " + toPlayer);
         }
     }
 

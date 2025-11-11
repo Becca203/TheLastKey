@@ -16,6 +16,7 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
     private FrameInput _frameInput;
     private Vector2 _frameVelocity;
     private bool _cachedQueryStartInColliders;
+    private NetworkPlayer _networkPlayer;
 
     #region Interface
 
@@ -31,8 +32,8 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
     {
         _rb = GetComponent<Rigidbody2D>();
         _col = GetComponent<CapsuleCollider2D>();
+        _networkPlayer = GetComponent<NetworkPlayer>();
 
-        // FORCE correct configuration
         _rb.gravityScale = 0f;
         _rb.linearDamping = 0f;
         _rb.angularDamping = 0f;
@@ -74,13 +75,30 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
 
     private void FixedUpdate()
     {
-        CheckCollisions();
+        // Si está siendo empujado, permitir solo movimiento horizontal
+        if (_networkPlayer != null && _networkPlayer.isPushed)
+        {
+            HandleDirectionDuringPush();
+            return;
+        }
 
+        CheckCollisions();
         HandleJump();
         HandleDirection();
         HandleGravity();
-        
         ApplyMovement();
+    }
+
+    // Nuevo método para controlar movimiento horizontal durante el empuje
+    private void HandleDirectionDuringPush()
+    {
+        if (_frameInput.Move.x != 0)
+        {
+            // Solo modifica la velocidad horizontal, mantiene la vertical del empuje
+            Vector2 currentVel = _rb.linearVelocity;
+            currentVel.x = Mathf.MoveTowards(currentVel.x, _frameInput.Move.x * _stats.MaxSpeed, _stats.AirDeceleration * Time.fixedDeltaTime);
+            _rb.linearVelocity = currentVel;
+        }
     }
 
     #region Collisions
@@ -92,14 +110,11 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
     {
         Physics2D.queriesStartInColliders = false;
 
-        // Ground and Ceiling
         bool groundHit = Physics2D.CapsuleCast(_col.bounds.center, _col.size, _col.direction, 0, Vector2.down, _stats.GrounderDistance, ~_stats.PlayerLayer);
         bool ceilingHit = Physics2D.CapsuleCast(_col.bounds.center, _col.size, _col.direction, 0, Vector2.up, _stats.GrounderDistance, ~_stats.PlayerLayer);
 
-        // Hit a Ceiling
         if (ceilingHit) _frameVelocity.y = Mathf.Min(0, _frameVelocity.y);
 
-        // Landed on the Ground
         if (!_grounded && groundHit)
         {
             _grounded = true;
@@ -108,7 +123,6 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
             _endedJumpEarly = false;
             GroundedChanged?.Invoke(true, Mathf.Abs(_frameVelocity.y));
         }
-        // Left the Ground
         else if (_grounded && !groundHit)
         {
             _grounded = false;

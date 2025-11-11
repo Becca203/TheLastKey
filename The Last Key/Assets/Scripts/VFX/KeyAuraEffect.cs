@@ -3,11 +3,11 @@ using UnityEngine;
 public class KeyAuraEffect : MonoBehaviour
 {
     [Header("Aura Settings")]
-    [SerializeField] private Color auraColor = new Color(1f, 0.92f, 0.016f, 0.6f);
-    [SerializeField] private int blurLayers = 4;
-    [SerializeField] private float maxScale = 1.25f;
+    [SerializeField] private Color auraColor = new Color(1f, 0.92f, 0.016f, 0.7f);
+    [SerializeField] private int blurLayers = 7;
+    [SerializeField] private float maxScale = 1.15f;
     [SerializeField] private float pulseSpeed = 1.5f;
-    [SerializeField] private float pulseAmount = 0.15f;
+    [SerializeField] private float pulseAmount = 0.1f;
 
     private SpriteRenderer mainSprite;
     private SpriteRenderer playerSprite;
@@ -20,23 +20,33 @@ public class KeyAuraEffect : MonoBehaviour
 
         if (mainSprite == null)
         {
-            Debug.LogError("KeyAuraEffect: No se encontr� SpriteRenderer en este GameObject!");
+            Debug.LogError("KeyAuraEffect: No se encontró SpriteRenderer en este GameObject!");
             enabled = false;
             return;
         }
 
         if (playerSprite == null)
         {
-            Debug.LogError("KeyAuraEffect: No se encontr� SpriteRenderer del jugador en el padre!");
+            Debug.LogError("KeyAuraEffect: No se encontró SpriteRenderer del jugador en el padre!");
             enabled = false;
             return;
         }
 
-        CreateBlurLayers();
+        mainSprite.enabled = false;
     }
 
     void CreateBlurLayers()
     {
+        // Limpia las capas anteriores si existen
+        if (blurSprites != null)
+        {
+            foreach (var sr in blurSprites)
+            {
+                if (sr != null && sr.gameObject != null)
+                    Destroy(sr.gameObject);
+            }
+        }
+
         blurSprites = new SpriteRenderer[blurLayers];
 
         for (int i = 0; i < blurLayers; i++)
@@ -48,47 +58,47 @@ public class KeyAuraEffect : MonoBehaviour
 
             SpriteRenderer sr = layer.AddComponent<SpriteRenderer>();
 
-            // Uses the player's sprite
             sr.sprite = playerSprite.sprite;
             sr.sortingLayerName = mainSprite.sortingLayerName;
             sr.sortingOrder = mainSprite.sortingOrder - (i + 1);
 
-            // Progressive scale
-            float scale = 1f + (maxScale - 1f) * ((i + 1f) / blurLayers);
+            float normalizedIndex = (i + 1f) / blurLayers;
+            float scale = 1f + (maxScale - 1f) * normalizedIndex;
             layer.transform.localScale = Vector3.one * scale;
 
-            // Color with progressive transparency
             Color layerColor = auraColor;
-            layerColor.a = auraColor.a * (1f - ((float)i / blurLayers));
+            layerColor.a = auraColor.a * (1f - Mathf.Pow(normalizedIndex, 1.2f));
             sr.color = layerColor;
 
             blurSprites[i] = sr;
         }
 
-        // Hides the main sprite of the CheckKey
-        mainSprite.enabled = false;
+        Debug.Log("KeyAuraEffect: Created " + blurLayers + " blur layers");
     }
 
     void Update()
     {
         if (blurSprites == null || blurSprites.Length == 0) return;
 
-        // Updates the sprite if the player changes animation
+        // Actualiza el sprite si el jugador cambia de animación
         if (playerSprite != null && blurSprites[0].sprite != playerSprite.sprite)
         {
             foreach (SpriteRenderer sr in blurSprites)
             {
-                sr.sprite = playerSprite.sprite;
+                if (sr != null)
+                    sr.sprite = playerSprite.sprite;
             }
         }
 
-        // Pulse effect
+        // Efecto de pulsación
         float pulse = Mathf.Sin(Time.time * pulseSpeed) * pulseAmount;
 
         for (int i = 0; i < blurSprites.Length; i++)
         {
+            if (blurSprites[i] == null) continue;
+
             float normalizedIndex = (i + 1f) / blurLayers;
-            float baseScale = 1f + (maxScale - 1f) * Mathf.Pow(normalizedIndex, 1.5f);
+            float baseScale = 1f + (maxScale - 1f) * normalizedIndex;
             float finalScale = baseScale + pulse;
             blurSprites[i].transform.localScale = Vector3.one * finalScale;
         }
@@ -96,22 +106,20 @@ public class KeyAuraEffect : MonoBehaviour
 
     void OnEnable()
     {
-        // Recreates the layers if the GameObject is reactivated
-        if (blurSprites == null || blurSprites.Length == 0)
-        {
-            if (playerSprite == null)
-                playerSprite = GetComponentInParent<SpriteRenderer>();
+        // SIEMPRE recrea las capas al activarse
+        if (playerSprite == null)
+            playerSprite = GetComponentInParent<SpriteRenderer>();
 
-            if (mainSprite == null)
-                mainSprite = GetComponent<SpriteRenderer>();
+        if (mainSprite == null)
+            mainSprite = GetComponent<SpriteRenderer>();
 
-            CreateBlurLayers();
-        }
+        CreateBlurLayers();
+        Debug.Log("KeyAuraEffect: OnEnable - Aura activada");
     }
 
     void OnDisable()
     {
-        // Cleans layers when deactivated
+        // Limpia las capas cuando se desactiva
         if (blurSprites != null)
         {
             foreach (var sr in blurSprites)
@@ -119,6 +127,8 @@ public class KeyAuraEffect : MonoBehaviour
                 if (sr != null && sr.gameObject != null)
                     Destroy(sr.gameObject);
             }
+            blurSprites = null;
         }
+        Debug.Log("KeyAuraEffect: OnDisable - Aura desactivada");
     }
 }

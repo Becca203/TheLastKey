@@ -21,80 +21,60 @@ public class UDPServer : MonoBehaviour
         public IPEndPoint endpoint;
         public string username;
         public int playerID;
-
-        public ClientInfo(IPEndPoint ep, int id)
-        {
-            endpoint = ep;
-            username = "";
-            playerID = id;
-        }
     }
 
-    // Ensure server persists across scenes
     private void Awake()
     {
-        DontDestroyOnLoad(this.gameObject);
+        DontDestroyOnLoad(gameObject);
     }
 
     private void Start()
     {
         ShowAvailableIPs();
-
         CreateAndBindTheSocket();
-        Thread receiveThread = new Thread(ReceiveMessages);
-        receiveThread.IsBackground = true;
-        receiveThread.Start();
     }
 
     private void ShowAvailableIPs()
     {
-        Debug.Log("========== SERVER NETWORK INFO ==========");
-        try
-        {
-            string hostName = Dns.GetHostName();
-            IPAddress[] addresses = Dns.GetHostAddresses(hostName);
-            Debug.Log("Available IP Addresses for clients to connect:");
+        string hostName = Dns.GetHostName();
+        IPHostEntry hostEntry = Dns.GetHostEntry(hostName);
 
-            foreach (IPAddress addr in addresses)
+        Debug.Log("===== SERVER AVAILABLE IPs =====");
+        foreach (IPAddress ip in hostEntry.AddressList)
+        {
+            if (ip.AddressFamily == AddressFamily.InterNetwork)
             {
-                if (addr.AddressFamily == AddressFamily.InterNetwork)
-                {
-                    Debug.Log($"  → {addr} (Use this IP on other computers!)");
-                }
+                Debug.Log($"IPv4: {ip}");
             }
-
-            Debug.Log("Local machine can use: 127.0.0.1");
-            Debug.Log("==========================================");
         }
-        catch (Exception e)
-        {
-            Debug.LogError($"Error getting network info: {e.Message}");
-        }
+        Debug.Log("================================");
     }
 
-    // Create and bind UDP socket to port
     private void CreateAndBindTheSocket()
     {
         try
         {
             serverSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-            ipep = new IPEndPoint(IPAddress.Any, 9050);
             serverSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+
+            ipep = new IPEndPoint(IPAddress.Any, 9050);
             serverSocket.Bind(ipep);
-            Debug.Log("UDP Server started on port 9050");
-        }
-        catch (SocketException se)
-        {
-            Debug.LogError($"SOCKET ERROR: {se.ErrorCode} - {se.Message}");
+
+            Thread receiveThread = new Thread(ReceiveMessages)
+            {
+                IsBackground = true,
+                Name = "UDP_Server_Receive"
+            };
+            receiveThread.Start();
+
+            Debug.Log($"[SERVER] Started on port {ipep.Port}");
         }
         catch (Exception e)
         {
-            Debug.LogError($"ERROR binding socket: {e.Message}");
+            Debug.LogError($"[SERVER] Error creating socket: {e.Message}");
         }
-
     }
 
-    // Receive and process messages from clients
     void ReceiveMessages()
     {
         byte[] buffer = new byte[2048];
@@ -105,18 +85,16 @@ public class UDPServer : MonoBehaviour
             try
             {
                 remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
-                int receiveBytes = serverSocket.ReceiveFrom(buffer, ref remoteEndPoint);
-                IPEndPoint clientEndPoint = (IPEndPoint)remoteEndPoint;
-
-                string msgType = NetworkSerializer.GetMessageType(buffer, receiveBytes);
+                int receivedBytes = serverSocket.ReceiveFrom(buffer, ref remoteEndPoint);
+                string msgType = NetworkSerializer.GetMessageType(buffer, receivedBytes);
 
                 if (msgType != "POSITION")
                 {
-                    Debug.Log("Server received: " + msgType);
+                    Debug.Log($"[SERVER] <<< Received {msgType} ({receivedBytes} bytes) from {remoteEndPoint}");
                 }
 
-                ClientInfo client = GetOrCreateClient(clientEndPoint);
-                ProcessMessage(msgType, buffer, receiveBytes, client);
+                ClientInfo client = GetOrCreateClient((IPEndPoint)remoteEndPoint);
+                ProcessMessage(msgType, buffer, receivedBytes, client);
             }
             catch (SocketException se)
             {
@@ -127,20 +105,18 @@ public class UDPServer : MonoBehaviour
             }
             catch (ThreadAbortException)
             {
-                Debug.Log("[SERVER] Receive thread aborted");
                 break;
             }
             catch (Exception e)
             {
                 if (isRunning)
                 {
-                    Debug.LogError($"[SERVER] Error receiving: {e.Message}");
+                    Debug.LogError($"[SERVER] Receive error: {e.Message}");
                 }
             }
         }
     }
 
-    // Process messages based on their type
     private void ProcessMessage(string msgType, byte[] buffer, int length, ClientInfo client)
     {
         switch (msgType)
@@ -163,20 +139,131 @@ public class UDPServer : MonoBehaviour
             case "KEY_COLLECTED":
                 ProcessKeyCollectedMessage(buffer, length, client);
                 break;
+            case "KEY_TRANSFER":
+                ProcessKeyTransferMessage(buffer, length);
+                break;
             default:
                 Debug.LogWarning("Unknown message type: " + msgType);
                 break;
         }
     }
 
-    private void ProcessGameOverMessage(byte[] buffer, int length)
+    private ClientInfo GetOrCreateClient(IPEndPoint endpoint)
     {
-        SimpleMessage gameOverMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
-        if (gameOverMsg != null)
+        lock (clientsLock)
         {
-            Debug.Log("Server received GAME_OVER - Winner: Player " + gameOverMsg.content);
-            BroadcastMessage(gameOverMsg);
-            gameStarted = false;
+            foreach (ClientInfo client in connectedClients)
+            {
+                if (client.endpoint.Equals(endpoint))
+                {
+                    return client;
+                }
+            }
+
+            ClientInfo newClient = new ClientInfo
+            {
+                endpoint = endpoint,
+                username = "",
+                playerID = connectedClients.Count + 1
+            };
+            connectedClients.Add(newClient);
+
+            Debug.Log($"[SERVER] New client added: {endpoint} as Player {newClient.playerID}");
+            return newClient;
+        }
+    }
+
+    private void ProcessUsernameMessage(byte[] buffer, int length, ClientInfo client)
+    {
+        SimpleMessage usernameMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
+        if (usernameMsg != null)
+        {
+            if (client.username != usernameMsg.content)
+            {
+                client.username = usernameMsg.content;
+                Debug.Log("User joined: " + usernameMsg.content + " as Player " + client.playerID);
+
+                SendServerName(client.endpoint);
+                SendUserList();
+
+                SimpleMessage joinedMsg = new SimpleMessage("PLAYER_JOINED", usernameMsg.content);
+                BroadcastMessage(joinedMsg, client);
+            }
+        }
+    }
+
+    private void SendServerName(IPEndPoint clientEndpoint)
+    {
+        try
+        {
+            SimpleMessage msg = new SimpleMessage("USERNAME", "SERVER_NAME:" + serverName);
+            byte[] data = NetworkSerializer.Serialize(msg);
+            serverSocket.SendTo(data, clientEndpoint);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"[SERVER] Error sending server name: {e.Message}");
+        }
+    }
+
+    private void SendUserList()
+    {
+        lock (clientsLock)
+        {
+            PlayerListMessage playerListMsg = new PlayerListMessage();
+            foreach (ClientInfo client in connectedClients)
+            {
+                if (!string.IsNullOrEmpty(client.username))
+                {
+                    playerListMsg.players.Add(client.username);
+                }
+            }
+
+            byte[] data = NetworkSerializer.Serialize(playerListMsg);
+            foreach (ClientInfo client in connectedClients)
+            {
+                try
+                {
+                    serverSocket.SendTo(data, client.endpoint);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"[SERVER] Error sending user list to {client.username}: {e.Message}");
+                }
+            }
+        }
+    }
+
+    private void ProcessChatMessage(byte[] buffer, int length)
+    {
+        ChatMessage chatMsg = NetworkSerializer.Deserialize<ChatMessage>(buffer, length);
+        if (chatMsg != null)
+        {
+            Debug.Log($"[SERVER] Chat from {chatMsg.username}: {chatMsg.message}");
+            BroadcastMessage(chatMsg);
+        }
+    }
+
+    private void ProcessPositionMessage(byte[] buffer, int length, ClientInfo sender)
+    {
+        if (!gameStarted) return;
+
+        lock (clientsLock)
+        {
+            foreach (ClientInfo client in connectedClients)
+            {
+                if (client != sender)
+                {
+                    try
+                    {
+                        serverSocket.SendTo(buffer, length, SocketFlags.None, client.endpoint);
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogError($"[SERVER] Error forwarding position to {client.username}: {e.Message}");
+                    }
+                }
+            }
         }
     }
 
@@ -217,43 +304,17 @@ public class UDPServer : MonoBehaviour
         }
     }
 
-    private void ProcessUsernameMessage(byte[] buffer, int length, ClientInfo client)
+    private void ProcessGameOverMessage(byte[] buffer, int length)
     {
-        SimpleMessage usernameMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
-        if (usernameMsg != null)
+        SimpleMessage gameOverMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
+        if (gameOverMsg != null)
         {
-            if (client.username != usernameMsg.content)
-            {
-                client.username = usernameMsg.content;
-                Debug.Log("User joined: " + usernameMsg.content + " as Player " + client.playerID);
-
-                SendServerName(client.endpoint);
-                SendUserList();
-
-                SimpleMessage joinedMsg = new SimpleMessage("PLAYER_JOINED", usernameMsg.content);
-                BroadcastMessage(joinedMsg, client);
-            }
+            Debug.Log("Server received GAME_OVER - Winner: Player " + gameOverMsg.content);
+            BroadcastMessage(gameOverMsg);
+            gameStarted = false;
         }
     }
 
-    private void ProcessChatMessage(byte[] buffer, int length)
-    {
-        ChatMessage chatMsg = NetworkSerializer.Deserialize<ChatMessage>(buffer, length);
-        if (chatMsg != null)
-        {
-            Debug.Log("Chat from " + chatMsg.username + ": " + chatMsg.message);
-            BroadcastMessage(chatMsg);
-        }
-    }
-
-    private void ProcessPositionMessage(byte[] buffer, int length, ClientInfo sender)
-    {
-        PositionMessage posMsg = NetworkSerializer.Deserialize<PositionMessage>(buffer, length);
-        if (posMsg != null)
-        {
-            ForwardPositionUpdate(posMsg, sender);
-        }
-    }
     private void ProcessKeyCollectedMessage(byte[] buffer, int length, ClientInfo client)
     {
         SimpleMessage keyMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
@@ -268,85 +329,27 @@ public class UDPServer : MonoBehaviour
             BroadcastMessage(hideMsg);
         }
     }
-    private void ForwardPositionUpdate(PositionMessage posMsg, ClientInfo sender)
-    {
-        byte[] data = NetworkSerializer.Serialize(posMsg);
-        if (data == null) return;
 
-        lock (clientsLock)
+    private void ProcessKeyTransferMessage(byte[] buffer, int length)
+    {
+        KeyTransferMessage transferMsg = NetworkSerializer.Deserialize<KeyTransferMessage>(buffer, length);
+        if (transferMsg != null)
         {
-            foreach (var client in connectedClients)
-            {
-                if (client != sender && !string.IsNullOrEmpty(client.username))
-                {
-                    try
-                    {
-                        serverSocket.SendTo(data, client.endpoint);
-                    }
-                    catch (Exception e)
-                    {
-                        Debug.LogError("Error forwarding position to " + client.username + ": " + e.Message);
-                    }
-                }
-            }
+            Debug.Log("[SERVER] Key transferred from Player " + transferMsg.fromPlayerID + " to Player " + transferMsg.toPlayerID);
+            BroadcastMessage(transferMsg);
         }
     }
 
-    // Check if game should start or cancel based on player count
-    private void CheckAndStartGame()
-    {
-        lock (clientsLock)
-        {
-            int connectedPlayerCount = 0;
-            foreach (var client in connectedClients)
-            {
-                if (!string.IsNullOrEmpty(client.username))
-                {
-                    connectedPlayerCount++;
-                }
-            }
-
-            if (connectedPlayerCount < 2 && gameStarted)
-            {
-                gameStarted = false;
-                Debug.Log("Game cancelled - not enough players");
-                SimpleMessage cancelMsg = new SimpleMessage("GAME_CANCEL", "");
-                BroadcastMessage(cancelMsg);
-            }
-        }
-    }
-
-    // Remove client and notify others of disconnection
-    private void HandlePlayerDisconnection(ClientInfo disconnectedClient)
-    {
-        lock (clientsLock)
-        {
-            if (connectedClients.Remove(disconnectedClient))
-            {
-                Debug.Log("Player disconnected: " + disconnectedClient.username);
-                if (!string.IsNullOrEmpty(disconnectedClient.username))
-                {
-                    SimpleMessage leftMsg = new SimpleMessage("PLAYER_LEFT", disconnectedClient.username);
-                    BroadcastMessage(leftMsg);
-                    SendUserList();
-                    CheckAndStartGame();
-                }
-            }
-        }
-    }
-
-    // Send message to all connected clients except excluded one
-    private void BroadcastMessage<T>(T message, ClientInfo excludedClient = null) where T : NetworkMessage
+    private void BroadcastMessage(NetworkMessage message, ClientInfo exclude = null)
     {
         byte[] data = NetworkSerializer.Serialize(message);
         if (data == null) return;
 
         lock (clientsLock)
         {
-            foreach (var client in connectedClients)
+            foreach (ClientInfo client in connectedClients)
             {
-                if (client == excludedClient || string.IsNullOrEmpty(client.username))
-                    continue;
+                if (exclude != null && client == exclude) continue;
 
                 try
                 {
@@ -354,98 +357,25 @@ public class UDPServer : MonoBehaviour
                 }
                 catch (Exception e)
                 {
-                    Debug.LogError("Error broadcasting to " + client.username + ": " + e.Message);
-                    HandlePlayerDisconnection(client);
-                }
-            }
-        }
-
-        if (message.messageType != "POSITION")
-        {
-            Debug.Log("Broadcasted message: " + message.messageType);
-        }
-    }
-
-    // Send current player list to all clients
-    private void SendUserList()
-    {
-        lock (clientsLock)
-        {
-            PlayerListMessage playerListMsg = new PlayerListMessage();
-            foreach (var c in connectedClients)
-            {
-                if (!string.IsNullOrEmpty(c.username))
-                {
-                    playerListMsg.players.Add(c.username);
-                }
-            }
-
-            byte[] data = NetworkSerializer.Serialize(playerListMsg);
-            foreach (var client in connectedClients)
-            {
-                try
-                {
-                    if (!string.IsNullOrEmpty(client.username))
-                    {
-                        serverSocket.SendTo(data, client.endpoint);
-                        Debug.Log("Sent player list to: " + client.username);
-                    }
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError("Error sending player list: " + e.Message);
-                    HandlePlayerDisconnection(client);
+                    Debug.LogError($"[SERVER] Error broadcasting to {client.username}: {e.Message}");
                 }
             }
         }
     }
 
-    // Find existing client or create new one
-    private ClientInfo GetOrCreateClient(IPEndPoint clientEndPoint)
-    {
-        lock (clientsLock)
-        {
-            foreach (var client in connectedClients)
-            {
-                if (client.endpoint.Address.Equals(clientEndPoint.Address) &&
-                    client.endpoint.Port == clientEndPoint.Port)
-                {
-                    return client;
-                }
-            }
-
-            int newPlayerID = connectedClients.Count + 1;
-            ClientInfo newClient = new ClientInfo(clientEndPoint, newPlayerID);
-            connectedClients.Add(newClient);
-            Debug.Log("New client registered: " + clientEndPoint + " as Player " + newPlayerID);
-            return newClient;
-        }
-    }
-
-    private void SendServerName(IPEndPoint endPoint)
-    {
-        SimpleMessage msg = new SimpleMessage("USERNAME", "SERVER_NAME:" + serverName);
-        byte[] data = NetworkSerializer.Serialize(msg);
-        try
-        {
-            serverSocket.SendTo(data, endPoint);
-            Debug.Log("Sent server name to client: " + serverName);
-        }
-        catch (Exception e)
-        {
-            Debug.LogError("Error sending server name: " + e.Message);
-        }
-    }
-
-    // Close socket and cleanup
     void Shutdown()
     {
         if (hasShutdown) return;
         hasShutdown = true;
         isRunning = false;
+
+        Debug.Log("[SERVER] Shutting down...");
         try
         {
-            if (serverSocket != null) serverSocket.Close();
+            if (serverSocket != null)
+            {
+                serverSocket.Close();
+            }
         }
         catch { }
     }
