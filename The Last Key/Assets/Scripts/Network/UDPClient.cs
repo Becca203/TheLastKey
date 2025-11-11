@@ -114,22 +114,52 @@ public class UDPClient : MonoBehaviour
     {
         if (clientSocket == null)
         {
-            clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-            serverEndPoint = new IPEndPoint(IPAddress.Parse(serverIP), serverPort);
-            Thread receiveThread = new Thread(ReceiveMessages);
-            receiveThread.Start();
+            try
+            {
+                clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+
+                // Make reuse available and bind to ephemeral local port so ReceiveFrom works reliably
+                clientSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+                clientSocket.Bind(new IPEndPoint(IPAddress.Any, 0)); // OS assigns ephemeral port
+
+                // Validate server IP and prepare endpoint
+                try
+                {
+                    serverEndPoint = new IPEndPoint(IPAddress.Parse(serverIP), serverPort);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError("Invalid server IP: " + serverIP + " -> " + ex.Message);
+                    return;
+                }
+
+                Debug.Log($"UDP Client initialized. Local endpoint: {clientSocket.LocalEndPoint}, Server: {serverEndPoint}");
+
+                Thread receiveThread = new Thread(ReceiveMessages) { IsBackground = true };
+                receiveThread.Start();
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("Error initializing UDP client: " + e.Message);
+            }
         }
     }
 
     // Send initial connection message to server
     private void SendHandshake()
     {
+        if (clientSocket == null || serverEndPoint == null)
+        {
+            Debug.LogError("Cannot send handshake: socket or server endpoint not initialized");
+            return;
+        }
+
         try
         {
             SimpleMessage msg = new SimpleMessage("USERNAME", username);
             byte[] data = NetworkSerializer.Serialize(msg);
             clientSocket.SendTo(data, serverEndPoint);
-            Debug.Log("Sent username to server: " + username);
+            Debug.Log("Sent username to server: " + username + " -> " + serverEndPoint);
         }
         catch (Exception e)
         {
@@ -140,16 +170,19 @@ public class UDPClient : MonoBehaviour
     // Send chat message to server
     public void SendChatMessage(string message)
     {
+        if (clientSocket == null || serverEndPoint == null) return;
         ChatMessage chatMsg = new ChatMessage(username, message);
         byte[] data = NetworkSerializer.Serialize(chatMsg);
         if (data != null)
         {
-            clientSocket.SendTo(data, serverEndPoint);
+            try { clientSocket.SendTo(data, serverEndPoint); }
+            catch (Exception e) { Debug.LogError("Error sending chat: " + e.Message); }
         }
     }
 
     public void SendBytes(byte[] data)
     {
+        if (clientSocket == null || serverEndPoint == null) return;
         try
         {
             clientSocket.SendTo(data, serverEndPoint);
@@ -176,7 +209,7 @@ public class UDPClient : MonoBehaviour
 
                 if (msgType != "POSITION")
                 {
-                    Debug.Log("Received message type: " + msgType);
+                    Debug.Log("Received message type: " + msgType + " from " + remoteEndPoint.ToString());
                 }
 
                 ProcessMessage(msgType, buffer, receiveBytes);
