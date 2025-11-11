@@ -269,16 +269,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 554f98d163793494389ee29a6fd867c9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  movementSpeed: 8
-  movementSmoothing: 0.1
-  jumpForce: 12
-  fallGravity: 2.5
-  lowJumpGravity: 2
-  groundCheck: {fileID: 2961156503115219392}
-  groundCheckRadius: 0.1
-  groundLayer:
-    serializedVersion: 2
-    m_Bits: 8
+  _stats: {fileID: 11400000, guid: 3c3929367eade074a955d377b615d997, type: 2}
   keyOverlay: {fileID: 829808141061568626}
   hasKey: 0
 --- !u!70 &4576461351140852255
