@@ -1,9 +1,6 @@
 using System;
 using UnityEngine;
 
-/// <summary>
-/// Versión adaptada que combina el controlador de Tarodev con el sistema de llaves
-/// </summary>
 [RequireComponent(typeof(Rigidbody2D), typeof(Collider2D))]
 public class PlayerMovement2D : MonoBehaviour, IPlayerController
 {
@@ -35,7 +32,7 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
         _rb = GetComponent<Rigidbody2D>();
         _col = GetComponent<CapsuleCollider2D>();
 
-        // FUERZA configuración correcta
+        // FORCE correct configuration
         _rb.gravityScale = 0f;
         _rb.linearDamping = 0f;
         _rb.angularDamping = 0f;

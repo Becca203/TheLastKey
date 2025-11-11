@@ -10,6 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 4074414576072426027}
   - component: {fileID: 1269922348348040973}
+  - component: {fileID: 5378098619891921969}
   m_Layer: 0
   m_Name: 'CheckKey '
   m_TagString: Untagged
@@ -26,7 +27,7 @@ Transform:
   m_GameObject: {fileID: 2458461083127915655}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.02, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1.1696, y: 1.1046556, z: 1.1696}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -87,6 +88,23 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!114 &5378098619891921969
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2458461083127915655}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ffa28a62b32371446be9f15c6afa2367, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  auraColor: {r: 1, g: 0.84313726, b: 0, a: 0.6}
+  blurLayers: 7
+  maxScale: 1.2
+  pulseSpeed: 1.5
+  pulseAmount: 0.1
 --- !u!1 &3969122733571234335
 GameObject:
   m_ObjectHideFlags: 0

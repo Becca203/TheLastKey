@@ -10,6 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 654672610870490374}
   - component: {fileID: 8404596741589526266}
+  - component: {fileID: 7453148643534551335}
   m_Layer: 0
   m_Name: CheckKey
   m_TagString: Untagged
@@ -87,6 +88,23 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!114 &7453148643534551335
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 829808141061568626}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ffa28a62b32371446be9f15c6afa2367, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  auraColor: {r: 1, g: 0.84313726, b: 0, a: 0.6}
+  blurLayers: 7
+  maxScale: 1.2
+  pulseSpeed: 1.5
+  pulseAmount: 0.1
 --- !u!1 &3969122733571234335
 GameObject:
   m_ObjectHideFlags: 0

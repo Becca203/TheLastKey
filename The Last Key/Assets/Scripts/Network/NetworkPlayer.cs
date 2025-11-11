@@ -9,12 +9,12 @@ public class NetworkPlayer : MonoBehaviour
     [SerializeField] private float sendRate = 20f;
     [SerializeField] private float interpolationSpeed = 10f;
 
-    [Header("KeyStatus")]
-    [SerializeField] public bool hasKey = false;
-    [SerializeField] private GameObject keyOverlay;
+    [Header("Key Status")]
+    public bool hasKey = false;
 
     private Rigidbody2D rb;
     private UDPClient udpClient;
+    private PlayerMovement2D playerMovement;
     private float sendTimer = 0f;
 
     private Vector3 targetPosition;
@@ -24,16 +24,21 @@ public class NetworkPlayer : MonoBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         udpClient = FindAnyObjectByType<UDPClient>();
+        playerMovement = GetComponent<PlayerMovement2D>();
 
         if (udpClient == null)
         {
             Debug.LogError("UDPClient not found");
         }
 
+        if (playerMovement == null)
+        {
+            Debug.LogError("PlayerMovement2D not found on Player " + playerID);
+        }
+
         targetPosition = transform.position;
     }
 
-    // Handle network updates: send position if local, interpolate if remote
     void Update()
     {
         if (isLocalPlayer)
@@ -64,7 +69,6 @@ public class NetworkPlayer : MonoBehaviour
         }
     }
 
-    // Serialize and send current position and velocity to server
     private void SendPositionUpdate()
     {
         if (udpClient == null || rb == null) return;
@@ -88,6 +92,45 @@ public class NetworkPlayer : MonoBehaviour
     {
         targetPosition = position;
         targetVelocity = velocity;
+    }
+
+    // Updates the key status and visual overlay
+    public void SetHasKey(bool value)
+    {
+        hasKey = value;
+
+        if (playerMovement != null)
+        {
+            playerMovement.SetHasKey(value);
+            Debug.Log("Updated key overlay for Player " + playerID + ": " + value);
+        }
+    }
+
+    // Only the local player can collect the key
+    public void CollectKey()
+    {
+        if (!isLocalPlayer) return;
+
+        SetHasKey(true);
+        SendKeyCollectedMessage();
+    }
+
+    private void SendKeyCollectedMessage()
+    {
+        if (udpClient == null)
+        {
+            Debug.LogError("UDPClient not found!");
+            return;
+        }
+
+        SimpleMessage keyMsg = new SimpleMessage("KEY_COLLECTED", playerID.ToString());
+        byte[] data = NetworkSerializer.Serialize(keyMsg);
+
+        if (data != null)
+        {
+            udpClient.SendBytes(data);
+            Debug.Log("KEY_COLLECTED message sent for Player " + playerID);
+        }
     }
 
     [System.Serializable]
@@ -136,12 +179,5 @@ public class NetworkPlayer : MonoBehaviour
         {
             rb.linearVelocity = data.GetVelocity();
         }
-    }
-
-    public void SetHasKey(bool value)
-    {
-        hasKey = value;
-        if (keyOverlay != null)
-            keyOverlay.SetActive(value);
     }
 }
