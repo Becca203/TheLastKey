@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -16,11 +16,14 @@ public class UDPClient : MonoBehaviour
     private bool isRunning = true;
     private bool hasShutdown = false;
     private bool isInitialized = false;
+    private float connectionTimeout = 5f;
+    private float connectionTimer = 0f;
+    private bool waitingForServerResponse = false;
 
     private WaitingRoom waitingRoom;
     private bool shouldLoadWaitingRoom = false;
     private bool shouldLoadGameScene = false;
-    private bool shouldLoadGameOverScene = false; 
+    private bool shouldLoadGameOverScene = false;
 
     private int assignedPlayerID = 0;
     private int winnerID = 0;
@@ -43,22 +46,38 @@ public class UDPClient : MonoBehaviour
             InitializeSocket();
             SendHandshake();
             isInitialized = true;
+            waitingForServerResponse = true;
+            connectionTimer = 0f;
         }
     }
 
-    // Ensure client persists across scenes
     private void Awake()
     {
         DontDestroyOnLoad(gameObject);
     }
 
-    // Process pending updates from network thread
     private void Update()
     {
+        // Timeout de conexión
+        if (waitingForServerResponse)
+        {
+            connectionTimer += Time.deltaTime;
+            if (connectionTimer > connectionTimeout)
+            {
+                Debug.LogError($"[CLIENT] Connection timeout! No response from server at {serverIP}:{serverPort}");
+                Debug.LogError("[CLIENT] Possible causes:");
+                Debug.LogError("  1. Server is not running");
+                Debug.LogError("  2. Firewall is blocking UDP port 9050");
+                Debug.LogError("  3. Wrong IP address");
+                Debug.LogError("  4. Not on the same network");
+                waitingForServerResponse = false;
+            }
+        }
+
         if (shouldLoadWaitingRoom)
         {
             shouldLoadWaitingRoom = false;
-            waitingRoom = null; 
+            waitingRoom = null;
             SceneManager.LoadScene("WaitingRoom");
         }
 
@@ -109,48 +128,66 @@ public class UDPClient : MonoBehaviour
         }
     }
 
-    // Create UDP socket and start receive thread
     public void InitializeSocket()
     {
         if (clientSocket == null)
         {
             try
             {
+                Debug.Log("[CLIENT] ========== INITIALIZING UDP CLIENT ==========");
+
                 clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
 
-                // Make reuse available and bind to ephemeral local port so ReceiveFrom works reliably
+                // Configuración importante para UDP
                 clientSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-                clientSocket.Bind(new IPEndPoint(IPAddress.Any, 0)); // OS assigns ephemeral port
+                clientSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.Broadcast, true);
 
-                // Validate server IP and prepare endpoint
+                // NO pongas timeouts en el socket, déjalo bloqueante para ReceiveFrom
+                // clientSocket.Blocking = true; // por defecto ya es true
+
+                // Bind a cualquier puerto local disponible
+                IPEndPoint localEndPoint = new IPEndPoint(IPAddress.Any, 0);
+                clientSocket.Bind(localEndPoint);
+
+                Debug.Log($"[CLIENT] Socket bound to local endpoint: {clientSocket.LocalEndPoint}");
+
+                // Validar y configurar servidor
                 try
                 {
-                    serverEndPoint = new IPEndPoint(IPAddress.Parse(serverIP), serverPort);
+                    IPAddress serverAddr = IPAddress.Parse(serverIP);
+                    serverEndPoint = new IPEndPoint(serverAddr, serverPort);
+                    Debug.Log($"[CLIENT] Target server endpoint: {serverEndPoint}");
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogError("Invalid server IP: " + serverIP + " -> " + ex.Message);
+                    Debug.LogError($"[CLIENT] FATAL: Invalid server IP '{serverIP}': {ex.Message}");
                     return;
                 }
 
-                Debug.Log($"UDP Client initialized. Local endpoint: {clientSocket.LocalEndPoint}, Server: {serverEndPoint}");
-
-                Thread receiveThread = new Thread(ReceiveMessages) { IsBackground = true };
+                // Iniciar thread de recepción
+                Thread receiveThread = new Thread(ReceiveMessages)
+                {
+                    IsBackground = true,
+                    Name = "UDP_Receive_Thread"
+                };
                 receiveThread.Start();
+
+                Debug.Log("[CLIENT] Receive thread started successfully");
+                Debug.Log("[CLIENT] =============================================");
             }
             catch (Exception e)
             {
-                Debug.LogError("Error initializing UDP client: " + e.Message);
+                Debug.LogError($"[CLIENT] FATAL ERROR initializing socket: {e.Message}");
+                Debug.LogError($"[CLIENT] Stack trace: {e.StackTrace}");
             }
         }
     }
 
-    // Send initial connection message to server
     private void SendHandshake()
     {
         if (clientSocket == null || serverEndPoint == null)
         {
-            Debug.LogError("Cannot send handshake: socket or server endpoint not initialized");
+            Debug.LogError("[CLIENT] Cannot send handshake: socket or server endpoint not initialized");
             return;
         }
 
@@ -158,16 +195,37 @@ public class UDPClient : MonoBehaviour
         {
             SimpleMessage msg = new SimpleMessage("USERNAME", username);
             byte[] data = NetworkSerializer.Serialize(msg);
-            clientSocket.SendTo(data, serverEndPoint);
-            Debug.Log("Sent username to server: " + username + " -> " + serverEndPoint);
+
+            if (data == null)
+            {
+                Debug.LogError("[CLIENT] Failed to serialize handshake message");
+                return;
+            }
+
+            int bytesSent = clientSocket.SendTo(data, serverEndPoint);
+            Debug.Log($"[CLIENT] ========== HANDSHAKE SENT ==========");
+            Debug.Log($"[CLIENT] Username: {username}");
+            Debug.Log($"[CLIENT] Bytes sent: {bytesSent}");
+            Debug.Log($"[CLIENT] To: {serverEndPoint}");
+            Debug.Log($"[CLIENT] From: {clientSocket.LocalEndPoint}");
+            Debug.Log($"[CLIENT] Waiting for server response...");
+            Debug.Log($"[CLIENT] ====================================");
+        }
+        catch (SocketException se)
+        {
+            Debug.LogError($"[CLIENT] Socket error sending handshake: {se.ErrorCode} - {se.Message}");
+            Debug.LogError($"[CLIENT] This usually means:");
+            Debug.LogError("  - Network is unreachable");
+            Debug.LogError("  - No route to host");
+            Debug.LogError("  - Firewall is blocking");
         }
         catch (Exception e)
         {
-            Debug.LogError("Error sending handshake: " + e.Message);
+            Debug.LogError($"[CLIENT] Error sending handshake: {e.Message}");
+            Debug.LogError($"[CLIENT] Stack trace: {e.StackTrace}");
         }
     }
 
-    // Send chat message to server
     public void SendChatMessage(string message)
     {
         if (clientSocket == null || serverEndPoint == null) return;
@@ -176,7 +234,7 @@ public class UDPClient : MonoBehaviour
         if (data != null)
         {
             try { clientSocket.SendTo(data, serverEndPoint); }
-            catch (Exception e) { Debug.LogError("Error sending chat: " + e.Message); }
+            catch (Exception e) { Debug.LogError("[CLIENT] Error sending chat: " + e.Message); }
         }
     }
 
@@ -189,14 +247,16 @@ public class UDPClient : MonoBehaviour
         }
         catch (Exception e)
         {
-            Debug.LogError("Error sending bytes: " + e.Message);
+            Debug.LogError("[CLIENT] Error sending bytes: " + e.Message);
         }
     }
 
     void ReceiveMessages()
     {
         byte[] buffer = new byte[2048];
-        EndPoint remoteEndPoint = (EndPoint)new IPEndPoint(IPAddress.Any, 0);
+        EndPoint remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
+
+        Debug.Log("[CLIENT] ReceiveMessages thread started, waiting for data...");
 
         while (isRunning)
         {
@@ -209,7 +269,7 @@ public class UDPClient : MonoBehaviour
 
                 if (msgType != "POSITION")
                 {
-                    Debug.Log("Received message type: " + msgType + " from " + remoteEndPoint.ToString());
+                    Debug.Log($"[CLIENT] <<< Received {msgType} ({receiveBytes} bytes) from {remoteEndPoint}");
                 }
 
                 ProcessMessage(msgType, buffer, receiveBytes);
@@ -218,22 +278,24 @@ public class UDPClient : MonoBehaviour
             {
                 if (isRunning)
                 {
-                    Debug.Log("Socket error: " + se.Message);
+                    Debug.LogError($"[CLIENT] Socket error: {se.ErrorCode} - {se.Message}");
                 }
             }
             catch (ThreadAbortException)
             {
+                Debug.Log("[CLIENT] Receive thread aborted");
                 break;
             }
             catch (Exception e)
             {
-                Debug.LogError("Error receiving: " + e.Message);
+                Debug.LogError($"[CLIENT] Error receiving: {e.Message}");
                 break;
             }
         }
+
+        Debug.Log("[CLIENT] ReceiveMessages thread ending");
     }
 
-    // Process message based on its type
     private void ProcessMessage(string msgType, byte[] buffer, int length)
     {
         switch (msgType)
@@ -269,7 +331,7 @@ public class UDPClient : MonoBehaviour
                 ProcessHideKey(buffer, length);
                 break;
             default:
-                Debug.LogWarning("Unknown message type: " + msgType);
+                Debug.LogWarning("[CLIENT] Unknown message type: " + msgType);
                 break;
         }
     }
@@ -281,7 +343,7 @@ public class UDPClient : MonoBehaviour
         {
             if (int.TryParse(gameOverMsg.content, out int id))
             {
-                Debug.Log("Game over! Player " + id + " wins!");
+                Debug.Log("[CLIENT] Game over! Player " + id + " wins!");
                 winnerID = id;
                 shouldLoadGameOverScene = true;
             }
@@ -294,7 +356,8 @@ public class UDPClient : MonoBehaviour
         if (usernameMsg != null && usernameMsg.content.StartsWith("SERVER_NAME:"))
         {
             string serverName = usernameMsg.content.Substring(12);
-            Debug.Log("Connected to server: " + serverName);
+            Debug.Log("[CLIENT] ✓ Connected to server: " + serverName);
+            waitingForServerResponse = false;
             shouldLoadWaitingRoom = true;
         }
     }
@@ -308,7 +371,7 @@ public class UDPClient : MonoBehaviour
             int retries = 0;
             while (room == null && retries < 10)
             {
-                Thread.Sleep(100); 
+                Thread.Sleep(100);
                 room = GetWaitingRoomManager();
                 retries++;
             }
@@ -350,7 +413,7 @@ public class UDPClient : MonoBehaviour
         ChatMessage chatMsg = NetworkSerializer.Deserialize<ChatMessage>(buffer, length);
         if (chatMsg != null)
         {
-            Debug.Log("From " + chatMsg.username + ": " + chatMsg.message);
+            Debug.Log("[CLIENT] From " + chatMsg.username + ": " + chatMsg.message);
             WaitingRoom room = GetWaitingRoomManager();
             if (room != null)
             {
@@ -366,7 +429,7 @@ public class UDPClient : MonoBehaviour
         {
             assignedPlayerID = gameStartMsg.assignedPlayerID;
             shouldSetPlayerID = true;
-            Debug.Log("Game starting! Assigned as Player " + assignedPlayerID);
+            Debug.Log("[CLIENT] Game starting! Assigned as Player " + assignedPlayerID);
             shouldLoadGameScene = true;
         }
     }
@@ -394,7 +457,7 @@ public class UDPClient : MonoBehaviour
         SimpleMessage updateMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
         if (updateMsg != null && int.TryParse(updateMsg.content, out int playerID))
         {
-            Debug.Log("Player " + playerID + " has the key (sync)");
+            Debug.Log("[CLIENT] Player " + playerID + " has the key (sync)");
             GameManager gameManager = GameManager.Instance;
             if (gameManager != null)
             {
@@ -406,15 +469,17 @@ public class UDPClient : MonoBehaviour
             }
         }
     }
+
     private void ProcessHideKey(byte[] buffer, int length)
     {
-        Debug.Log("Received HIDE_KEY message, disabling key object");
+        Debug.Log("[CLIENT] Received HIDE_KEY message, disabling key object");
         KeyBehaviour key = FindAnyObjectByType<KeyBehaviour>();
         if (key != null)
         {
             key.gameObject.SetActive(false);
         }
     }
+
     private WaitingRoom GetWaitingRoomManager()
     {
         if (waitingRoom == null)
@@ -424,12 +489,12 @@ public class UDPClient : MonoBehaviour
         return waitingRoom;
     }
 
-    // Close socket and cleanup
     void Shutdown()
     {
         if (hasShutdown) return;
         hasShutdown = true;
         isRunning = false;
+        Debug.Log("[CLIENT] Shutting down...");
         try
         {
             if (clientSocket != null)
