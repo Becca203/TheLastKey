@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
@@ -38,18 +38,60 @@ public class UDPServer : MonoBehaviour
 
     private void Start()
     {
+        ShowAvailableIPs();
+
         CreateAndBindTheSocket();
         Thread receiveThread = new Thread(ReceiveMessages);
+        receiveThread.IsBackground = true;
         receiveThread.Start();
+    }
+
+    private void ShowAvailableIPs()
+    {
+        Debug.Log("========== SERVER NETWORK INFO ==========");
+        try
+        {
+            string hostName = Dns.GetHostName();
+            IPAddress[] addresses = Dns.GetHostAddresses(hostName);
+            Debug.Log("Available IP Addresses for clients to connect:");
+
+            foreach (IPAddress addr in addresses)
+            {
+                if (addr.AddressFamily == AddressFamily.InterNetwork)
+                {
+                    Debug.Log($"  → {addr} (Use this IP on other computers!)");
+                }
+            }
+
+            Debug.Log("Local machine can use: 127.0.0.1");
+            Debug.Log("==========================================");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"Error getting network info: {e.Message}");
+        }
     }
 
     // Create and bind UDP socket to port
     private void CreateAndBindTheSocket()
     {
-        serverSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-        ipep = new IPEndPoint(IPAddress.Any, 9050);
-        serverSocket.Bind(ipep);
-        Debug.Log("UDP Server started on port 9050");
+        try
+        {
+            serverSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+            ipep = new IPEndPoint(IPAddress.Any, 9050);
+            serverSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            serverSocket.Bind(ipep);
+            Debug.Log("UDP Server started on port 9050");
+        }
+        catch (SocketException se)
+        {
+            Debug.LogError($"SOCKET ERROR: {se.ErrorCode} - {se.Message}");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"ERROR binding socket: {e.Message}");
+        }
+
     }
 
     // Receive and process messages from clients
@@ -80,17 +122,20 @@ public class UDPServer : MonoBehaviour
             {
                 if (isRunning)
                 {
-                    Debug.Log("Socket error: " + se.Message);
+                    Debug.LogError($"[SERVER] Socket error: {se.ErrorCode} - {se.Message}");
                 }
             }
             catch (ThreadAbortException)
             {
+                Debug.Log("[SERVER] Receive thread aborted");
                 break;
             }
             catch (Exception e)
             {
-                Debug.LogError("Error receiving: " + e.Message);
-                break;
+                if (isRunning)
+                {
+                    Debug.LogError($"[SERVER] Error receiving: {e.Message}");
+                }
             }
         }
     }
@@ -132,7 +177,6 @@ public class UDPServer : MonoBehaviour
             Debug.Log("Server received GAME_OVER - Winner: Player " + gameOverMsg.content);
             BroadcastMessage(gameOverMsg);
             gameStarted = false;
-            Debug.Log("Loading GameOverScene for Player " + gameOverMsg.content);
         }
     }
 
@@ -217,11 +261,9 @@ public class UDPServer : MonoBehaviour
         {
             Debug.Log("Server received KEY_COLLECTED from Player " + keyMsg.content);
 
-            // Reenviar a todos los clientes que ese jugador tiene la llave
             SimpleMessage updateMsg = new SimpleMessage("UPDATE_KEY_STATE", keyMsg.content);
             BroadcastMessage(updateMsg);
 
-            // Tambi�n avisar que la llave debe desaparecer
             SimpleMessage hideMsg = new SimpleMessage("HIDE_KEY", "");
             BroadcastMessage(hideMsg);
         }

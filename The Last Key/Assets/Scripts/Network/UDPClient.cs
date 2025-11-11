@@ -2,6 +2,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
+using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -39,6 +40,11 @@ public class UDPClient : MonoBehaviour
     private bool hasPendingPositionUpdate = false;
     private object positionLock = new object();
 
+    private void Awake()
+    {
+        DontDestroyOnLoad(gameObject);
+    }
+
     void Start()
     {
         if (!isInitialized)
@@ -46,30 +52,19 @@ public class UDPClient : MonoBehaviour
             InitializeSocket();
             SendHandshake();
             isInitialized = true;
-            waitingForServerResponse = true;
             connectionTimer = 0f;
         }
     }
 
-    private void Awake()
-    {
-        DontDestroyOnLoad(gameObject);
-    }
-
     private void Update()
     {
-        // Timeout de conexión
+        // Connection timeout check
         if (waitingForServerResponse)
         {
             connectionTimer += Time.deltaTime;
             if (connectionTimer > connectionTimeout)
             {
                 Debug.LogError($"[CLIENT] Connection timeout! No response from server at {serverIP}:{serverPort}");
-                Debug.LogError("[CLIENT] Possible causes:");
-                Debug.LogError("  1. Server is not running");
-                Debug.LogError("  2. Firewall is blocking UDP port 9050");
-                Debug.LogError("  3. Wrong IP address");
-                Debug.LogError("  4. Not on the same network");
                 waitingForServerResponse = false;
             }
         }
@@ -130,56 +125,30 @@ public class UDPClient : MonoBehaviour
 
     public void InitializeSocket()
     {
-        if (clientSocket == null)
+        if (clientSocket != null) return;
+
+        try
         {
-            try
+            clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+            clientSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+
+            IPEndPoint localEndPoint = new IPEndPoint(IPAddress.Any, 0);
+            clientSocket.Bind(localEndPoint);
+
+            IPAddress serverAddr = IPAddress.Parse(serverIP);
+            serverEndPoint = new IPEndPoint(serverAddr, serverPort);
+
+            Thread receiveThread = new Thread(ReceiveMessages)
             {
-                Debug.Log("[CLIENT] ========== INITIALIZING UDP CLIENT ==========");
-
-                clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-
-                // Configuración importante para UDP
-                clientSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-                clientSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.Broadcast, true);
-
-                // NO pongas timeouts en el socket, déjalo bloqueante para ReceiveFrom
-                // clientSocket.Blocking = true; // por defecto ya es true
-
-                // Bind a cualquier puerto local disponible
-                IPEndPoint localEndPoint = new IPEndPoint(IPAddress.Any, 0);
-                clientSocket.Bind(localEndPoint);
-
-                Debug.Log($"[CLIENT] Socket bound to local endpoint: {clientSocket.LocalEndPoint}");
-
-                // Validar y configurar servidor
-                try
-                {
-                    IPAddress serverAddr = IPAddress.Parse(serverIP);
-                    serverEndPoint = new IPEndPoint(serverAddr, serverPort);
-                    Debug.Log($"[CLIENT] Target server endpoint: {serverEndPoint}");
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError($"[CLIENT] FATAL: Invalid server IP '{serverIP}': {ex.Message}");
-                    return;
-                }
-
-                // Iniciar thread de recepción
-                Thread receiveThread = new Thread(ReceiveMessages)
-                {
-                    IsBackground = true,
-                    Name = "UDP_Receive_Thread"
-                };
-                receiveThread.Start();
-
-                Debug.Log("[CLIENT] Receive thread started successfully");
-                Debug.Log("[CLIENT] =============================================");
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"[CLIENT] FATAL ERROR initializing socket: {e.Message}");
-                Debug.LogError($"[CLIENT] Stack trace: {e.StackTrace}");
-            }
+                IsBackground = true,
+                Name = "UDP_Client_Receive"
+            };
+            receiveThread.Start();
+            Debug.Log($"[CLIENT] Connected to {serverEndPoint}");
+        }
+        catch (Exception e)
+        {
+           Debug.LogError($"[CLIENT] Socket initialization failed: {e.Message}");
         }
     }
 
@@ -196,41 +165,25 @@ public class UDPClient : MonoBehaviour
             SimpleMessage msg = new SimpleMessage("USERNAME", username);
             byte[] data = NetworkSerializer.Serialize(msg);
 
-            if (data == null)
+            if (data != null)
             {
-                Debug.LogError("[CLIENT] Failed to serialize handshake message");
-                return;
+                clientSocket.SendTo(data, serverEndPoint);
+                Debug.LogError($"[CLIENT] Handshake sent: {username}");
             }
-
-            int bytesSent = clientSocket.SendTo(data, serverEndPoint);
-            Debug.Log($"[CLIENT] ========== HANDSHAKE SENT ==========");
-            Debug.Log($"[CLIENT] Username: {username}");
-            Debug.Log($"[CLIENT] Bytes sent: {bytesSent}");
-            Debug.Log($"[CLIENT] To: {serverEndPoint}");
-            Debug.Log($"[CLIENT] From: {clientSocket.LocalEndPoint}");
-            Debug.Log($"[CLIENT] Waiting for server response...");
-            Debug.Log($"[CLIENT] ====================================");
-        }
-        catch (SocketException se)
-        {
-            Debug.LogError($"[CLIENT] Socket error sending handshake: {se.ErrorCode} - {se.Message}");
-            Debug.LogError($"[CLIENT] This usually means:");
-            Debug.LogError("  - Network is unreachable");
-            Debug.LogError("  - No route to host");
-            Debug.LogError("  - Firewall is blocking");
         }
         catch (Exception e)
         {
             Debug.LogError($"[CLIENT] Error sending handshake: {e.Message}");
-            Debug.LogError($"[CLIENT] Stack trace: {e.StackTrace}");
         }
     }
 
     public void SendChatMessage(string message)
     {
         if (clientSocket == null || serverEndPoint == null) return;
+
         ChatMessage chatMsg = new ChatMessage(username, message);
         byte[] data = NetworkSerializer.Serialize(chatMsg);
+
         if (data != null)
         {
             try { clientSocket.SendTo(data, serverEndPoint); }
@@ -241,6 +194,7 @@ public class UDPClient : MonoBehaviour
     public void SendBytes(byte[] data)
     {
         if (clientSocket == null || serverEndPoint == null) return;
+
         try
         {
             clientSocket.SendTo(data, serverEndPoint);
@@ -256,15 +210,12 @@ public class UDPClient : MonoBehaviour
         byte[] buffer = new byte[2048];
         EndPoint remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
 
-        Debug.Log("[CLIENT] ReceiveMessages thread started, waiting for data...");
-
         while (isRunning)
         {
             try
             {
                 remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
                 int receiveBytes = clientSocket.ReceiveFrom(buffer, ref remoteEndPoint);
-
                 string msgType = NetworkSerializer.GetMessageType(buffer, receiveBytes);
 
                 if (msgType != "POSITION")
@@ -283,17 +234,16 @@ public class UDPClient : MonoBehaviour
             }
             catch (ThreadAbortException)
             {
-                Debug.Log("[CLIENT] Receive thread aborted");
                 break;
             }
             catch (Exception e)
             {
-                Debug.LogError($"[CLIENT] Error receiving: {e.Message}");
-                break;
+                if (isRunning)
+                {
+                    Debug.LogError($"[CLIENT] Receive error: {e.Message}");
+                }
             }
         }
-
-        Debug.Log("[CLIENT] ReceiveMessages thread ending");
     }
 
     private void ProcessMessage(string msgType, byte[] buffer, int length)
@@ -356,7 +306,7 @@ public class UDPClient : MonoBehaviour
         if (usernameMsg != null && usernameMsg.content.StartsWith("SERVER_NAME:"))
         {
             string serverName = usernameMsg.content.Substring(12);
-            Debug.Log("[CLIENT] ✓ Connected to server: " + serverName);
+            Debug.Log("[CLIENT] Connected to server: " + serverName);
             waitingForServerResponse = false;
             shouldLoadWaitingRoom = true;
         }
@@ -365,25 +315,25 @@ public class UDPClient : MonoBehaviour
     private void ProcessPlayerListMessage(byte[] buffer, int length)
     {
         PlayerListMessage playerListMsg = NetworkSerializer.Deserialize<PlayerListMessage>(buffer, length);
-        if (playerListMsg != null)
-        {
-            WaitingRoom room = GetWaitingRoomManager();
-            int retries = 0;
-            while (room == null && retries < 10)
-            {
-                Thread.Sleep(100);
-                room = GetWaitingRoomManager();
-                retries++;
-            }
+        if (playerListMsg != null) return;
 
-            if (room != null)
+        WaitingRoom room = GetWaitingRoomManager();
+        int retries = 0;
+
+        while (room == null && retries < 10)
+        {
+            Thread.Sleep(100);
+            room = GetWaitingRoomManager();
+            retries++;
+        }
+
+        if (room != null)
+        {
+            room.ClearPlayers();
+            foreach (string player in playerListMsg.players)
             {
-                room.ClearPlayers();
-                foreach (string player in playerListMsg.players)
-                {
-                    if (!string.IsNullOrEmpty(player.Trim()))
-                        room.AddPlayer(player.Trim());
-                }
+                if (!string.IsNullOrEmpty(player.Trim()))
+                    room.AddPlayer(player.Trim());
             }
         }
     }
