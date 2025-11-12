@@ -23,11 +23,6 @@ public class UDPServer : MonoBehaviour
         public int playerID;
     }
 
-    private void Awake()
-    {
-        DontDestroyOnLoad(gameObject);
-    }
-
     private void Start()
     {
         ShowAvailableIPs();
@@ -48,6 +43,29 @@ public class UDPServer : MonoBehaviour
             }
         }
         Debug.Log("================================");
+    }
+
+    public string GetServerIP()
+    {
+        try
+        {
+            string hostName = Dns.GetHostName();
+            IPHostEntry hostEntry = Dns.GetHostEntry(hostName);
+
+            foreach (IPAddress ip in hostEntry.AddressList)
+            {
+                if (ip.AddressFamily == AddressFamily.InterNetwork)
+                {
+                    return ip.ToString();
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"[SERVER] Error getting IP: {e.Message}");
+        }
+
+        return "127.0.0.1";
     }
 
     private void CreateAndBindTheSocket()
@@ -299,7 +317,7 @@ public class UDPServer : MonoBehaviour
             }
             else
             {
-                Debug.LogWarning("Not enough players to start the game");
+                Debug.LogWarning("Not enough players to start game");
             }
         }
     }
@@ -309,9 +327,8 @@ public class UDPServer : MonoBehaviour
         SimpleMessage gameOverMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
         if (gameOverMsg != null)
         {
-            Debug.Log("Server received GAME_OVER - Winner: Player " + gameOverMsg.content);
+            Debug.Log($"[SERVER] Game over! Winner: Player {gameOverMsg.content}");
             BroadcastMessage(gameOverMsg);
-            gameStarted = false;
         }
     }
 
@@ -320,27 +337,22 @@ public class UDPServer : MonoBehaviour
         SimpleMessage keyMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
         if (keyMsg != null)
         {
-            Debug.Log("Server received KEY_COLLECTED from Player " + keyMsg.content);
-
-            SimpleMessage updateMsg = new SimpleMessage("UPDATE_KEY_STATE", keyMsg.content);
-            BroadcastMessage(updateMsg);
-
-            SimpleMessage hideMsg = new SimpleMessage("HIDE_KEY", "");
-            BroadcastMessage(hideMsg);
+            Debug.Log($"[SERVER] Player {client.playerID} collected key");
+            BroadcastMessage(keyMsg);
         }
     }
 
     private void ProcessKeyTransferMessage(byte[] buffer, int length)
     {
-        KeyTransferMessage transferMsg = NetworkSerializer.Deserialize<KeyTransferMessage>(buffer, length);
+        SimpleMessage transferMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
         if (transferMsg != null)
         {
-            Debug.Log("[SERVER] Key transferred from Player " + transferMsg.fromPlayerID + " to Player " + transferMsg.toPlayerID);
+            Debug.Log($"[SERVER] Key transfer: {transferMsg.content}");
             BroadcastMessage(transferMsg);
         }
     }
 
-    private void BroadcastMessage(NetworkMessage message, ClientInfo exclude = null)
+    private void BroadcastMessage<T>(T message, ClientInfo excludeClient = null) where T : NetworkMessage
     {
         byte[] data = NetworkSerializer.Serialize(message);
         if (data == null) return;
@@ -349,7 +361,8 @@ public class UDPServer : MonoBehaviour
         {
             foreach (ClientInfo client in connectedClients)
             {
-                if (exclude != null && client == exclude) continue;
+                if (excludeClient != null && client.endpoint.Equals(excludeClient.endpoint))
+                    continue;
 
                 try
                 {
@@ -363,23 +376,34 @@ public class UDPServer : MonoBehaviour
         }
     }
 
-    void Shutdown()
+    private void OnDestroy()
+    {
+        Shutdown();
+    }
+
+    private void OnApplicationQuit()
+    {
+        Shutdown();
+    }
+
+    private void Shutdown()
     {
         if (hasShutdown) return;
         hasShutdown = true;
-        isRunning = false;
 
         Debug.Log("[SERVER] Shutting down...");
-        try
+        isRunning = false;
+
+        if (serverSocket != null)
         {
-            if (serverSocket != null)
+            try
             {
                 serverSocket.Close();
             }
+            catch (Exception e)
+            {
+                Debug.LogError($"[SERVER] Error closing socket: {e.Message}");
+            }
         }
-        catch { }
     }
-
-    void OnApplicationQuit() => Shutdown();
-    void OnDestroy() => Shutdown();
 }

@@ -102,4 +102,3 @@ public class KeyTransferMessage : NetworkMessage
         toPlayerID = to;
     }
 }
-// ELIMINA TODA LA CLASE PushMessage de aquí
