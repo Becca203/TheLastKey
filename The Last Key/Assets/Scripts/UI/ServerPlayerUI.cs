@@ -1,9 +1,8 @@
+using System.Net;
+using System.Net.Sockets;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.SceneManagement;
-using System.Net;
-using System.Net.Sockets;
 
 public class ServerPlayerUI : MonoBehaviour
 {
@@ -15,16 +14,10 @@ public class ServerPlayerUI : MonoBehaviour
 
     private void Start()
     {
-        // Display available IPs
         DisplayLocalIP();
 
-        // Setup play button
         if (playButton != null)
             playButton.onClick.AddListener(OnPlayButtonClicked);
-
-        // Set default name
-        if (nameInputField != null)
-            nameInputField.text = "Host";
 
         UpdateStatus("Enter your name and click PLAY to start hosting");
     }
@@ -37,8 +30,6 @@ public class ServerPlayerUI : MonoBehaviour
         {
             ipAddressText.text = $"Your Server IP: {localIP}\n(Share this IP with other players)";
         }
-
-        Debug.Log($"[ServerPlayerUI] Local IP: {localIP}");
     }
 
     private string GetLocalIPAddress()
@@ -76,23 +67,14 @@ public class ServerPlayerUI : MonoBehaviour
 
         UpdateStatus("Starting server...");
 
-        // Initialize NetworkManager as Host
         if (NetworkManager.Instance != null)
         {
             NetworkManager.Instance.StartAsHost(playerName);
-
-            // Wait a moment for server to initialize, then go to waiting room
-            Invoke(nameof(GoToWaitingRoom), 0.5f);
         }
         else
         {
             UpdateStatus("Error: NetworkManager not found!");
         }
-    }
-
-    private void GoToWaitingRoom()
-    {
-        SceneManager.LoadScene("WaitingRoom");
     }
 
     private void UpdateStatus(string message)
@@ -101,6 +83,5 @@ public class ServerPlayerUI : MonoBehaviour
         {
             statusText.text = message;
         }
-        Debug.Log($"[ServerPlayerUI] {message}");
     }
 }

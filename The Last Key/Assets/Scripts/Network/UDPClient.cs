@@ -40,27 +40,22 @@ public class UDPClient : MonoBehaviour
     private bool hasPendingPositionUpdate = false;
     private object positionLock = new object();
 
-    // NEW: Queue for player list updates
+    // Queue for player list updates
     private PlayerListMessage pendingPlayerList = null;
     private bool hasPendingPlayerList = false;
     private object playerListLock = new object();
 
-    // NEW: Queue for player joined/left messages
+    // Queue for player joined/left messages
     private string pendingPlayerJoined = null;
     private string pendingPlayerLeft = null;
     private bool hasPendingPlayerJoined = false;
     private bool hasPendingPlayerLeft = false;
     private object playerUpdateLock = new object();
 
-    // NEW: Queue for chat messages
+    // Queue for chat messages
     private ChatMessage pendingChatMessage = null;
     private bool hasPendingChatMessage = false;
     private object chatLock = new object();
-
-    void Start()
-    {
-        Debug.Log("[CLIENT] UDPClient created, waiting for manual initialization...");
-    }
 
     /// <summary>
     /// Manual initialization called by NetworkManager after setting serverIP and username
@@ -148,7 +143,7 @@ public class UDPClient : MonoBehaviour
             }
         }
 
-        // NEW: Process player list on main thread
+        // Process player list on main thread
         if (hasPendingPlayerList)
         {
             lock (playerListLock)
@@ -156,20 +151,14 @@ public class UDPClient : MonoBehaviour
                 WaitingRoom room = GetWaitingRoomManager();
                 if (room != null && pendingPlayerList != null)
                 {
-                    room.ClearPlayers();
-                    foreach (string player in pendingPlayerList.players)
-                    {
-                        if (!string.IsNullOrEmpty(player.Trim()))
-                            room.AddPlayer(player.Trim());
-                    }
-                    Debug.Log($"[CLIENT] Player list updated: {pendingPlayerList.players.Count} players");
+                    room.SyncPlayerList(pendingPlayerList.players);
+                    hasPendingPlayerList = false;
+                    pendingPlayerList = null;
                 }
-                hasPendingPlayerList = false;
-                pendingPlayerList = null;
             }
         }
 
-        // NEW: Process player joined on main thread
+        // Process player joined on main thread
         if (hasPendingPlayerJoined)
         {
             lock (playerUpdateLock)
@@ -178,14 +167,13 @@ public class UDPClient : MonoBehaviour
                 if (room != null && !string.IsNullOrEmpty(pendingPlayerJoined))
                 {
                     room.AddPlayer(pendingPlayerJoined);
-                    Debug.Log($"[CLIENT] Player joined: {pendingPlayerJoined}");
                 }
                 hasPendingPlayerJoined = false;
                 pendingPlayerJoined = null;
             }
         }
 
-        // NEW: Process player left on main thread
+        // Process player left on main thread
         if (hasPendingPlayerLeft)
         {
             lock (playerUpdateLock)
@@ -194,14 +182,13 @@ public class UDPClient : MonoBehaviour
                 if (room != null && !string.IsNullOrEmpty(pendingPlayerLeft))
                 {
                     room.RemovePlayer(pendingPlayerLeft);
-                    Debug.Log($"[CLIENT] Player left: {pendingPlayerLeft}");
                 }
                 hasPendingPlayerLeft = false;
                 pendingPlayerLeft = null;
             }
         }
 
-        // NEW: Process chat messages on main thread
+        // Process chat messages on main thread
         if (hasPendingChatMessage)
         {
             lock (chatLock)
@@ -409,6 +396,7 @@ public class UDPClient : MonoBehaviour
             string serverName = usernameMsg.content.Substring(12);
             Debug.Log("[CLIENT] Connected to server: " + serverName);
             waitingForServerResponse = false;
+            
             shouldLoadWaitingRoom = true;
         }
     }
@@ -418,7 +406,6 @@ public class UDPClient : MonoBehaviour
         PlayerListMessage playerListMsg = NetworkSerializer.Deserialize<PlayerListMessage>(buffer, length);
         if (playerListMsg == null) return;
 
-        // Queue the update to be processed on main thread
         lock (playerListLock)
         {
             pendingPlayerList = playerListMsg;
@@ -431,7 +418,6 @@ public class UDPClient : MonoBehaviour
         SimpleMessage joinedMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
         if (joinedMsg != null)
         {
-            // Queue the update to be processed on main thread
             lock (playerUpdateLock)
             {
                 pendingPlayerJoined = joinedMsg.content;
@@ -445,7 +431,6 @@ public class UDPClient : MonoBehaviour
         SimpleMessage leftMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
         if (leftMsg != null)
         {
-            // Queue the update to be processed on main thread
             lock (playerUpdateLock)
             {
                 pendingPlayerLeft = leftMsg.content;
@@ -461,7 +446,6 @@ public class UDPClient : MonoBehaviour
         {
             Debug.Log("[CLIENT] From " + chatMsg.username + ": " + chatMsg.message);
             
-            // Queue the chat message to be processed on main thread
             lock (chatLock)
             {
                 pendingChatMessage = chatMsg;
@@ -557,7 +541,6 @@ public class UDPClient : MonoBehaviour
 
     private WaitingRoom GetWaitingRoomManager()
     {
-        // ONLY call this from main thread (Update)
         if (waitingRoom == null)
         {
             waitingRoom = FindAnyObjectByType<WaitingRoom>();
@@ -570,7 +553,7 @@ public class UDPClient : MonoBehaviour
         if (hasShutdown) return;
         hasShutdown = true;
         isRunning = false;
-        Debug.Log("[CLIENT] Shutting down...");
+        
         try
         {
             if (clientSocket != null)

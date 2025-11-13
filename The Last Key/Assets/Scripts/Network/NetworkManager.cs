@@ -72,6 +72,9 @@ public class NetworkManager : MonoBehaviour
         
         Debug.Log("[NetworkManager] Server ready, now creating client...");
         CreateClient();
+        
+        // DON'T load WaitingRoom here - let UDPClient handle it after server confirmation
+        Debug.Log("[NetworkManager] Client will load WaitingRoom after receiving server handshake");
     }
 
     /// <summary>

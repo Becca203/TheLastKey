@@ -106,11 +106,6 @@ public class UDPServer : MonoBehaviour
                 int receivedBytes = serverSocket.ReceiveFrom(buffer, ref remoteEndPoint);
                 string msgType = NetworkSerializer.GetMessageType(buffer, receivedBytes);
 
-                if (msgType != "POSITION")
-                {
-                    Debug.Log($"[SERVER] <<< Received {msgType} ({receivedBytes} bytes) from {remoteEndPoint}");
-                }
-
                 ClientInfo client = GetOrCreateClient((IPEndPoint)remoteEndPoint);
                 ProcessMessage(msgType, buffer, receivedBytes, client);
             }
@@ -161,7 +156,7 @@ public class UDPServer : MonoBehaviour
                 ProcessKeyTransferMessage(buffer, length);
                 break;
             default:
-                Debug.LogWarning("Unknown message type: " + msgType);
+                Debug.LogWarning("[SERVER] Unknown message type: " + msgType);
                 break;
         }
     }
@@ -186,7 +181,6 @@ public class UDPServer : MonoBehaviour
             };
             connectedClients.Add(newClient);
 
-            Debug.Log($"[SERVER] New client added: {endpoint} as Player {newClient.playerID}");
             return newClient;
         }
     }
@@ -199,7 +193,6 @@ public class UDPServer : MonoBehaviour
             if (client.username != usernameMsg.content)
             {
                 client.username = usernameMsg.content;
-                Debug.Log("User joined: " + usernameMsg.content + " as Player " + client.playerID);
 
                 SendServerName(client.endpoint);
                 SendUserList();
@@ -246,7 +239,7 @@ public class UDPServer : MonoBehaviour
                 }
                 catch (Exception e)
                 {
-                    Debug.LogError($"[SERVER] Error sending user list to {client.username}: {e.Message}");
+                    Debug.LogError($"[SERVER] Error sending user list: {e.Message}");
                 }
             }
         }
@@ -257,7 +250,6 @@ public class UDPServer : MonoBehaviour
         ChatMessage chatMsg = NetworkSerializer.Deserialize<ChatMessage>(buffer, length);
         if (chatMsg != null)
         {
-            Debug.Log($"[SERVER] Chat from {chatMsg.username}: {chatMsg.message}");
             BroadcastMessage(chatMsg);
         }
     }
@@ -278,7 +270,7 @@ public class UDPServer : MonoBehaviour
                     }
                     catch (Exception e)
                     {
-                        Debug.LogError($"[SERVER] Error forwarding position to {client.username}: {e.Message}");
+                        Debug.LogError($"[SERVER] Error forwarding position: {e.Message}");
                     }
                 }
             }
@@ -291,7 +283,6 @@ public class UDPServer : MonoBehaviour
         {
             if (connectedClients.Count >= 2)
             {
-                Debug.Log("Starting game for all clients...");
                 gameStarted = true;
 
                 int playerID = 1;
@@ -305,11 +296,10 @@ public class UDPServer : MonoBehaviour
                         try
                         {
                             serverSocket.SendTo(data, client.endpoint);
-                            Debug.Log("Sent GAME_START to " + client.username + " as Player " + playerID);
                         }
                         catch (Exception e)
                         {
-                            Debug.LogError("Error sending game start to " + client.username + ": " + e.Message);
+                            Debug.LogError($"[SERVER] Error sending game start: {e.Message}");
                         }
                         playerID++;
                     }
@@ -317,7 +307,7 @@ public class UDPServer : MonoBehaviour
             }
             else
             {
-                Debug.LogWarning("Not enough players to start game");
+                Debug.LogWarning("[SERVER] Not enough players to start game");
             }
         }
     }
@@ -327,7 +317,6 @@ public class UDPServer : MonoBehaviour
         SimpleMessage gameOverMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
         if (gameOverMsg != null)
         {
-            Debug.Log($"[SERVER] Game over! Winner: Player {gameOverMsg.content}");
             BroadcastMessage(gameOverMsg);
         }
     }
@@ -337,17 +326,20 @@ public class UDPServer : MonoBehaviour
         SimpleMessage keyMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
         if (keyMsg != null)
         {
-            Debug.Log($"[SERVER] Player {client.playerID} collected key");
+            // Broadcast KEY_COLLECTED to all clients
             BroadcastMessage(keyMsg);
+            
+            // Send HIDE_KEY to hide the key object on all clients
+            SimpleMessage hideKeyMsg = new SimpleMessage("HIDE_KEY", "");
+            BroadcastMessage(hideKeyMsg);
         }
     }
 
     private void ProcessKeyTransferMessage(byte[] buffer, int length)
     {
-        SimpleMessage transferMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
+        KeyTransferMessage transferMsg = NetworkSerializer.Deserialize<KeyTransferMessage>(buffer, length);
         if (transferMsg != null)
         {
-            Debug.Log($"[SERVER] Key transfer: {transferMsg.content}");
             BroadcastMessage(transferMsg);
         }
     }
@@ -370,7 +362,7 @@ public class UDPServer : MonoBehaviour
                 }
                 catch (Exception e)
                 {
-                    Debug.LogError($"[SERVER] Error broadcasting to {client.username}: {e.Message}");
+                    Debug.LogError($"[SERVER] Error broadcasting: {e.Message}");
                 }
             }
         }
@@ -391,7 +383,6 @@ public class UDPServer : MonoBehaviour
         if (hasShutdown) return;
         hasShutdown = true;
 
-        Debug.Log("[SERVER] Shutting down...");
         isRunning = false;
 
         if (serverSocket != null)

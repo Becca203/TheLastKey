@@ -1,6 +1,6 @@
 using UnityEngine;
-using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 public class MainMenuUI : MonoBehaviour
 {
@@ -31,19 +31,16 @@ public class MainMenuUI : MonoBehaviour
 
     private void OnHostButtonClicked()
     {
-        Debug.Log("[MainMenu] Host button clicked");
         SceneManager.LoadScene("ServerPlayerScene");
     }
 
     private void OnJoinButtonClicked()
     {
-        Debug.Log("[MainMenu] Join button clicked");
         SceneManager.LoadScene("ClientJoinScene");
     }
 
     private void OnExitButtonClicked()
     {
-        Debug.Log("[MainMenu] Exit button clicked");
         Application.Quit();
         
         #if UNITY_EDITOR

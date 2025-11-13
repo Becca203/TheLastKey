@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -29,13 +30,14 @@ public class WaitingRoom : MonoBehaviour
             playButton.onClick.AddListener(OnPlayButtonClicked);
         }
 
-        // If this is a client (not the server), add the player's username to the room
-        if (!IsServer())
+        // Add the local player to the room immediately
+        string myUsername = GetMyUsername();
+        if (!string.IsNullOrEmpty(myUsername))
         {
-            string myUsername = GetMyUsername();
-            if (!string.IsNullOrEmpty(myUsername)) 
-                AddPlayer(myUsername);
+            AddPlayer(myUsername);
+            Debug.Log($"[WaitingRoom] Added local player: {myUsername}");
         }
+        
         UpdateInfo();
     }
 
@@ -162,5 +164,52 @@ public class WaitingRoom : MonoBehaviour
     {
         connectedPlayers.Clear();
         UpdateInfo();
+    }
+
+    /// <summary>
+    /// Synchronizes the local player list with the server's authoritative list
+    /// </summary>
+    public void SyncPlayerList(List<string> serverPlayerList)
+    {
+        // Get the local username to avoid duplicate notifications
+        string myUsername = GetMyUsername();
+
+        // Find players that left (in local but not in server list)
+        List<string> playersToRemove = new List<string>();
+        foreach (string localPlayer in connectedPlayers)
+        {
+            if (!serverPlayerList.Contains(localPlayer))
+            {
+                playersToRemove.Add(localPlayer);
+            }
+        }
+
+        // Remove players that left
+        foreach (string player in playersToRemove)
+        {
+            if (connectedPlayers.Remove(player))
+            {
+                if (player != myUsername)
+                {
+                    AddChatMessage("System", player + " has left the room.");
+                }
+            }
+        }
+
+        // Add new players from server list
+        foreach (string serverPlayer in serverPlayerList)
+        {
+            if (!string.IsNullOrEmpty(serverPlayer.Trim()) && !connectedPlayers.Contains(serverPlayer))
+            {
+                connectedPlayers.Add(serverPlayer);
+                if (serverPlayer != myUsername)
+                {
+                    AddChatMessage("System", serverPlayer + " has joined the room.");
+                }
+            }
+        }
+
+        UpdateInfo();
+        Debug.Log($"[WaitingRoom] Synced player list: {connectedPlayers.Count} players");
     }
 }

@@ -1,7 +1,6 @@
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.SceneManagement;
 
 public class ClientJoinUI : MonoBehaviour
 {
@@ -11,20 +10,40 @@ public class ClientJoinUI : MonoBehaviour
     public Button connectButton;
     public TextMeshProUGUI statusText;
 
+    private bool isConnecting = false;
+    private float connectionTimer = 0f;
+    private float connectionTimeout = 10f;
+
     private void Start()
     {
-        // Setup connect button
         if (connectButton != null)
             connectButton.onClick.AddListener(OnConnectButtonClicked);
 
-        // Set default values
-        if (nameInputField != null)
-            nameInputField.text = "Player";
-
-        if (ipInputField != null)
-            ipInputField.text = "127.0.0.1";
-
         UpdateStatus("Enter server IP and your name to join");
+    }
+
+    private void Update()
+    {
+        // Show connection progress
+        if (isConnecting)
+        {
+            connectionTimer += Time.deltaTime;
+            
+            if (connectionTimer > connectionTimeout)
+            {
+                UpdateStatus("Connection timeout! Please check the server IP and try again.");
+                isConnecting = false;
+                
+                if (connectButton != null)
+                    connectButton.interactable = true;
+            }
+            else
+            {
+                int dots = Mathf.FloorToInt(connectionTimer * 2) % 4;
+                string dotsString = new string('.', dots);
+                UpdateStatus($"Connecting{dotsString}");
+            }
+        }
     }
 
     private void OnConnectButtonClicked()
@@ -45,25 +64,28 @@ public class ClientJoinUI : MonoBehaviour
             return;
         }
 
+        // Disable button while connecting
+        if (connectButton != null)
+            connectButton.interactable = false;
+
         UpdateStatus($"Connecting to {serverIP}...");
+        isConnecting = true;
+        connectionTimer = 0f;
 
         // Initialize NetworkManager as Client
         if (NetworkManager.Instance != null)
         {
             NetworkManager.Instance.StartAsClient(playerName, serverIP);
-
-            // Go to waiting room (client will auto-connect)
-            Invoke(nameof(GoToWaitingRoom), 0.5f);
+            Debug.Log($"[ClientJoinUI] Connecting to {serverIP} with username '{playerName}'");
         }
         else
         {
             UpdateStatus("Error: NetworkManager not found!");
+            isConnecting = false;
+            
+            if (connectButton != null)
+                connectButton.interactable = true;
         }
-    }
-
-    private void GoToWaitingRoom()
-    {
-        SceneManager.LoadScene("WaitingRoom");
     }
 
     private void UpdateStatus(string message)
