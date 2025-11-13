@@ -155,9 +155,21 @@ public class UDPServer : MonoBehaviour
             case "KEY_TRANSFER":
                 ProcessKeyTransferMessage(buffer, length);
                 break;
+            case "PUSH":
+                ProcessPushMessage(buffer, length);
+                break;
             default:
                 Debug.LogWarning("[SERVER] Unknown message type: " + msgType);
                 break;
+        }
+    }
+
+    private void ProcessPushMessage(byte[] buffer, int length)
+    {
+        PushMessage pushMsg = NetworkSerializer.Deserialize<PushMessage>(buffer, length);
+        if (pushMsg != null)
+        {
+            BroadcastMessage(pushMsg);
         }
     }
 

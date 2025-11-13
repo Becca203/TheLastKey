@@ -57,6 +57,36 @@ public class UDPClient : MonoBehaviour
     private bool hasPendingChatMessage = false;
     private object chatLock = new object();
 
+    // Queue for key collected messages
+    private int pendingKeyCollectedPlayerID = -1;
+    private bool hasPendingKeyCollected = false;
+    private object keyCollectedLock = new object();
+
+    // Queue for hide key
+    private bool shouldHideKey = false;
+    private object hideKeyLock = new object();
+
+    // Queue for key transfer messages
+    private struct KeyTransferData
+    {
+        public int fromPlayerID;
+        public int toPlayerID;
+    }
+    private KeyTransferData pendingKeyTransfer;
+    private bool hasPendingKeyTransfer = false;
+    private object keyTransferLock = new object();
+
+    // Queue for push messages
+    private struct PushData
+    {
+        public int playerID;
+        public Vector2 velocity;
+        public float duration;
+    }
+    private PushData pendingPush;
+    private bool hasPendingPush = false;
+    private object pushLock = new object();
+
     /// <summary>
     /// Manual initialization called by NetworkManager after setting serverIP and username
     /// </summary>
@@ -67,8 +97,6 @@ public class UDPClient : MonoBehaviour
             Debug.LogWarning("[CLIENT] Already initialized!");
             return;
         }
-
-        Debug.Log($"[CLIENT] Initializing with username='{username}', serverIP='{serverIP}'");
 
         InitializeSocket();
         SendHandshake();
@@ -121,7 +149,6 @@ public class UDPClient : MonoBehaviour
             }
             else
             {
-                Debug.LogWarning("GameManager not found, retrying...");
                 shouldSetPlayerID = true;
             }
         }
@@ -202,6 +229,83 @@ public class UDPClient : MonoBehaviour
                 pendingChatMessage = null;
             }
         }
+
+        // Process key collected on main thread
+        if (hasPendingKeyCollected)
+        {
+            lock (keyCollectedLock)
+            {
+                GameManager gameManager = GameManager.Instance;
+                if (gameManager != null)
+                {
+                    NetworkPlayer player = gameManager.FindPlayerByID(pendingKeyCollectedPlayerID);
+                    if (player != null)
+                    {
+                        player.SetHasKey(true);
+                    }
+                }
+                hasPendingKeyCollected = false;
+                pendingKeyCollectedPlayerID = -1;
+            }
+        }
+
+        // Process hide key on main thread
+        if (shouldHideKey)
+        {
+            lock (hideKeyLock)
+            {
+                KeyBehaviour key = FindAnyObjectByType<KeyBehaviour>();
+                if (key != null)
+                {
+                    key.gameObject.SetActive(false);
+                }
+                shouldHideKey = false;
+            }
+        }
+
+        // Process key transfer on main thread
+        if (hasPendingKeyTransfer)
+        {
+            lock (keyTransferLock)
+            {
+                GameManager gameManager = GameManager.Instance;
+                if (gameManager != null)
+                {
+                    NetworkPlayer fromPlayer = gameManager.FindPlayerByID(pendingKeyTransfer.fromPlayerID);
+                    NetworkPlayer toPlayer = gameManager.FindPlayerByID(pendingKeyTransfer.toPlayerID);
+
+                    if (fromPlayer != null && toPlayer != null)
+                    {
+                        fromPlayer.SetHasKey(false);
+                        toPlayer.SetHasKey(true);
+                    }
+                }
+                hasPendingKeyTransfer = false;
+            }
+        }
+
+        // Process push on main thread
+        if (hasPendingPush)
+        {
+            lock (pushLock)
+            {
+                GameManager gameManager = GameManager.Instance;
+                if (gameManager != null)
+                {
+                    NetworkPlayer player = gameManager.FindPlayerByID(pendingPush.playerID);
+                    if (player != null && !player.isLocalPlayer)
+                    {
+                        Rigidbody2D rb = player.GetComponent<Rigidbody2D>();
+                        if (rb != null)
+                        {
+                            rb.linearVelocity = pendingPush.velocity;
+                            player.StartPush(pendingPush.duration);
+                        }
+                    }
+                }
+                hasPendingPush = false;
+            }
+        }
     }
 
     public void InitializeSocket()
@@ -229,7 +333,6 @@ public class UDPClient : MonoBehaviour
                 Name = "UDP_Client_Receive"
             };
             receiveThread.Start();
-            Debug.Log($"[CLIENT] Socket initialized, connected to {serverEndPoint}");
         }
         catch (Exception e)
         {
@@ -253,7 +356,6 @@ public class UDPClient : MonoBehaviour
             if (data != null)
             {
                 clientSocket.SendTo(data, serverEndPoint);
-                Debug.Log($"[CLIENT] Handshake sent with username: {username}");
             }
         }
         catch (Exception e)
@@ -302,11 +404,6 @@ public class UDPClient : MonoBehaviour
                 remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
                 int receiveBytes = clientSocket.ReceiveFrom(buffer, ref remoteEndPoint);
                 string msgType = NetworkSerializer.GetMessageType(buffer, receiveBytes);
-
-                if (msgType != "POSITION")
-                {
-                    Debug.Log($"[CLIENT] <<< Received {msgType} ({receiveBytes} bytes) from {remoteEndPoint}");
-                }
 
                 ProcessMessage(msgType, buffer, receiveBytes);
             }
@@ -359,14 +456,17 @@ public class UDPClient : MonoBehaviour
             case "GAME_OVER":
                 ProcessGameOverMessage(buffer, length);
                 break;
-            case "UPDATE_KEY_STATE":
-                ProcessUpdateKeyState(buffer, length);
+            case "KEY_COLLECTED":
+                ProcessKeyCollectedMessage(buffer, length);
                 break;
             case "HIDE_KEY":
                 ProcessHideKey(buffer, length);
                 break;
             case "KEY_TRANSFER":
                 ProcessKeyTransferMessage(buffer, length);
+                break;
+            case "PUSH":
+                ProcessPushMessage(buffer, length);
                 break;
             default:
                 Debug.LogWarning("[CLIENT] Unknown message type: " + msgType);
@@ -381,7 +481,6 @@ public class UDPClient : MonoBehaviour
         {
             if (int.TryParse(gameOverMsg.content, out int id))
             {
-                Debug.Log("[CLIENT] Game over! Player " + id + " wins!");
                 winnerID = id;
                 shouldLoadGameOverScene = true;
             }
@@ -393,10 +492,7 @@ public class UDPClient : MonoBehaviour
         SimpleMessage usernameMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
         if (usernameMsg != null && usernameMsg.content.StartsWith("SERVER_NAME:"))
         {
-            string serverName = usernameMsg.content.Substring(12);
-            Debug.Log("[CLIENT] Connected to server: " + serverName);
             waitingForServerResponse = false;
-            
             shouldLoadWaitingRoom = true;
         }
     }
@@ -444,8 +540,6 @@ public class UDPClient : MonoBehaviour
         ChatMessage chatMsg = NetworkSerializer.Deserialize<ChatMessage>(buffer, length);
         if (chatMsg != null)
         {
-            Debug.Log("[CLIENT] From " + chatMsg.username + ": " + chatMsg.message);
-            
             lock (chatLock)
             {
                 pendingChatMessage = chatMsg;
@@ -461,7 +555,6 @@ public class UDPClient : MonoBehaviour
         {
             assignedPlayerID = gameStartMsg.assignedPlayerID;
             shouldSetPlayerID = true;
-            Debug.Log("[CLIENT] Game starting! Assigned as Player " + assignedPlayerID);
             shouldLoadGameScene = true;
         }
     }
@@ -484,31 +577,24 @@ public class UDPClient : MonoBehaviour
         }
     }
 
-    private void ProcessUpdateKeyState(byte[] buffer, int length)
+    private void ProcessKeyCollectedMessage(byte[] buffer, int length)
     {
-        SimpleMessage updateMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
-        if (updateMsg != null && int.TryParse(updateMsg.content, out int playerID))
+        SimpleMessage keyMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
+        if (keyMsg != null && int.TryParse(keyMsg.content, out int playerID))
         {
-            Debug.Log("[CLIENT] Player " + playerID + " has the key (sync)");
-            GameManager gameManager = GameManager.Instance;
-            if (gameManager != null)
+            lock (keyCollectedLock)
             {
-                NetworkPlayer player = gameManager.FindPlayerByID(playerID);
-                if (player != null)
-                {
-                    player.SetHasKey(true);
-                }
+                pendingKeyCollectedPlayerID = playerID;
+                hasPendingKeyCollected = true;
             }
         }
     }
 
     private void ProcessHideKey(byte[] buffer, int length)
     {
-        Debug.Log("[CLIENT] Received HIDE_KEY message, disabling key object");
-        KeyBehaviour key = FindAnyObjectByType<KeyBehaviour>();
-        if (key != null)
+        lock (hideKeyLock)
         {
-            key.gameObject.SetActive(false);
+            shouldHideKey = true;
         }
     }
 
@@ -517,24 +603,32 @@ public class UDPClient : MonoBehaviour
         KeyTransferMessage transferMsg = NetworkSerializer.Deserialize<KeyTransferMessage>(buffer, length);
         if (transferMsg != null)
         {
-            Debug.Log("[CLIENT] Key transferred from Player " + transferMsg.fromPlayerID + " to Player " + transferMsg.toPlayerID);
-            
-            GameManager gameManager = GameManager.Instance;
-            if (gameManager != null)
+            lock (keyTransferLock)
             {
-                NetworkPlayer fromPlayer = gameManager.FindPlayerByID(transferMsg.fromPlayerID);
-                NetworkPlayer toPlayer = gameManager.FindPlayerByID(transferMsg.toPlayerID);
+                pendingKeyTransfer = new KeyTransferData
+                {
+                    fromPlayerID = transferMsg.fromPlayerID,
+                    toPlayerID = transferMsg.toPlayerID
+                };
+                hasPendingKeyTransfer = true;
+            }
+        }
+    }
 
-                if (fromPlayer != null && toPlayer != null)
+    private void ProcessPushMessage(byte[] buffer, int length)
+    {
+        PushMessage pushMsg = NetworkSerializer.Deserialize<PushMessage>(buffer, length);
+        if (pushMsg != null)
+        {
+            lock (pushLock)
+            {
+                pendingPush = new PushData
                 {
-                    fromPlayer.SetHasKey(false);
-                    toPlayer.SetHasKey(true);
-                    Debug.Log("[CLIENT] Key successfully transferred");
-                }
-                else
-                {
-                    Debug.LogWarning("[CLIENT] Could not find players for key transfer");
-                }
+                    playerID = pushMsg.pushedPlayerID,
+                    velocity = new Vector2(pushMsg.velocityX, pushMsg.velocityY),
+                    duration = pushMsg.duration
+                };
+                hasPendingPush = true;
             }
         }
     }

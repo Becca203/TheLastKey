@@ -114,7 +114,23 @@ public class PlayerPushDetector : MonoBehaviour
             targetPlayer.StartPush(pushDuration);
             StartCoroutine(ApplyPushGravity(targetRb, pushDuration));
             
-            Debug.Log($"Applied push to Player {targetPlayer.playerID} - Velocity: {pushVelocity}");
+            // Send push message to server
+            SendPushMessage(targetPlayer.playerID, pushVelocity, pushDuration);
+        }
+    }
+
+    private void SendPushMessage(int targetPlayerID, Vector2 velocity, float duration)
+    {
+        UDPClient udpClient = FindAnyObjectByType<UDPClient>();
+        if (udpClient != null)
+        {
+            PushMessage pushMsg = new PushMessage(targetPlayerID, velocity, duration);
+            byte[] data = NetworkSerializer.Serialize(pushMsg);
+            
+            if (data != null)
+            {
+                udpClient.SendBytes(data);
+            }
         }
     }
 

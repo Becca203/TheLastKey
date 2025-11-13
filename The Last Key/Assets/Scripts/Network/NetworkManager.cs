@@ -35,8 +35,6 @@ public class NetworkManager : MonoBehaviour
 
         Instance = this;
         DontDestroyOnLoad(gameObject);
-        
-        Debug.Log("[NetworkManager] Initialized");
     }
 
     /// <summary>
@@ -52,9 +50,7 @@ public class NetworkManager : MonoBehaviour
 
         currentRole = NetworkRole.Host;
         playerName = hostName;
-        serverIP = "127.0.0.1"; // Host always connects to localhost
-
-        Debug.Log($"[NetworkManager] Starting as HOST with name: {hostName}");
+        serverIP = "127.0.0.1";
 
         // Create server first
         GameObject serverObj = new GameObject("UDPServer");
@@ -70,11 +66,7 @@ public class NetworkManager : MonoBehaviour
         // Wait 1 frame for server socket to bind
         yield return null;
         
-        Debug.Log("[NetworkManager] Server ready, now creating client...");
         CreateClient();
-        
-        // DON'T load WaitingRoom here - let UDPClient handle it after server confirmation
-        Debug.Log("[NetworkManager] Client will load WaitingRoom after receiving server handshake");
     }
 
     /// <summary>
@@ -92,8 +84,6 @@ public class NetworkManager : MonoBehaviour
         playerName = clientName;
         serverIP = targetIP;
 
-        Debug.Log($"[NetworkManager] Starting as CLIENT with name: {clientName}, connecting to: {targetIP}");
-
         CreateClient();
     }
 
@@ -103,14 +93,12 @@ public class NetworkManager : MonoBehaviour
         clientObj.transform.SetParent(transform);
         clientInstance = clientObj.AddComponent<UDPClient>();
         
-        // Configure client BEFORE calling Initialize
+        // Configure client before initialization
         clientInstance.serverIP = serverIP;
         clientInstance.username = playerName;
 
-        // NOW manually initialize the client (this sends handshake)
+        // Initialize the client (sends handshake)
         clientInstance.Initialize();
-        
-        Debug.Log($"[NetworkManager] Client created and initialized with username='{playerName}', serverIP='{serverIP}'");
     }
 
     public bool IsHost()
@@ -144,6 +132,6 @@ public class NetworkManager : MonoBehaviour
 
     private void OnApplicationQuit()
     {
-        Debug.Log("[NetworkManager] Shutting down...");
+        // Cleanup handled by individual components
     }
 }
