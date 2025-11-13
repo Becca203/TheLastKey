@@ -23,11 +23,6 @@ public class UDPServer : MonoBehaviour
         public int playerID;
     }
 
-    private void Awake()
-    {
-        DontDestroyOnLoad(gameObject);
-    }
-
     private void Start()
     {
         ShowAvailableIPs();
@@ -48,6 +43,29 @@ public class UDPServer : MonoBehaviour
             }
         }
         Debug.Log("================================");
+    }
+
+    public string GetServerIP()
+    {
+        try
+        {
+            string hostName = Dns.GetHostName();
+            IPHostEntry hostEntry = Dns.GetHostEntry(hostName);
+
+            foreach (IPAddress ip in hostEntry.AddressList)
+            {
+                if (ip.AddressFamily == AddressFamily.InterNetwork)
+                {
+                    return ip.ToString();
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"[SERVER] Error getting IP: {e.Message}");
+        }
+
+        return "127.0.0.1";
     }
 
     private void CreateAndBindTheSocket()
@@ -87,11 +105,6 @@ public class UDPServer : MonoBehaviour
                 remoteEndPoint = new IPEndPoint(IPAddress.Any, 0);
                 int receivedBytes = serverSocket.ReceiveFrom(buffer, ref remoteEndPoint);
                 string msgType = NetworkSerializer.GetMessageType(buffer, receivedBytes);
-
-                if (msgType != "POSITION")
-                {
-                    Debug.Log($"[SERVER] <<< Received {msgType} ({receivedBytes} bytes) from {remoteEndPoint}");
-                }
 
                 ClientInfo client = GetOrCreateClient((IPEndPoint)remoteEndPoint);
                 ProcessMessage(msgType, buffer, receivedBytes, client);
@@ -142,9 +155,21 @@ public class UDPServer : MonoBehaviour
             case "KEY_TRANSFER":
                 ProcessKeyTransferMessage(buffer, length);
                 break;
-            default:
-                Debug.LogWarning("Unknown message type: " + msgType);
+            case "PUSH":
+                ProcessPushMessage(buffer, length);
                 break;
+            default:
+                Debug.LogWarning("[SERVER] Unknown message type: " + msgType);
+                break;
+        }
+    }
+
+    private void ProcessPushMessage(byte[] buffer, int length)
+    {
+        PushMessage pushMsg = NetworkSerializer.Deserialize<PushMessage>(buffer, length);
+        if (pushMsg != null)
+        {
+            BroadcastMessage(pushMsg);
         }
     }
 
@@ -168,7 +193,6 @@ public class UDPServer : MonoBehaviour
             };
             connectedClients.Add(newClient);
 
-            Debug.Log($"[SERVER] New client added: {endpoint} as Player {newClient.playerID}");
             return newClient;
         }
     }
@@ -181,7 +205,6 @@ public class UDPServer : MonoBehaviour
             if (client.username != usernameMsg.content)
             {
                 client.username = usernameMsg.content;
-                Debug.Log("User joined: " + usernameMsg.content + " as Player " + client.playerID);
 
                 SendServerName(client.endpoint);
                 SendUserList();
@@ -228,7 +251,7 @@ public class UDPServer : MonoBehaviour
                 }
                 catch (Exception e)
                 {
-                    Debug.LogError($"[SERVER] Error sending user list to {client.username}: {e.Message}");
+                    Debug.LogError($"[SERVER] Error sending user list: {e.Message}");
                 }
             }
         }
@@ -239,7 +262,6 @@ public class UDPServer : MonoBehaviour
         ChatMessage chatMsg = NetworkSerializer.Deserialize<ChatMessage>(buffer, length);
         if (chatMsg != null)
         {
-            Debug.Log($"[SERVER] Chat from {chatMsg.username}: {chatMsg.message}");
             BroadcastMessage(chatMsg);
         }
     }
@@ -260,7 +282,7 @@ public class UDPServer : MonoBehaviour
                     }
                     catch (Exception e)
                     {
-                        Debug.LogError($"[SERVER] Error forwarding position to {client.username}: {e.Message}");
+                        Debug.LogError($"[SERVER] Error forwarding position: {e.Message}");
                     }
                 }
             }
@@ -273,7 +295,6 @@ public class UDPServer : MonoBehaviour
         {
             if (connectedClients.Count >= 2)
             {
-                Debug.Log("Starting game for all clients...");
                 gameStarted = true;
 
                 int playerID = 1;
@@ -287,11 +308,10 @@ public class UDPServer : MonoBehaviour
                         try
                         {
                             serverSocket.SendTo(data, client.endpoint);
-                            Debug.Log("Sent GAME_START to " + client.username + " as Player " + playerID);
                         }
                         catch (Exception e)
                         {
-                            Debug.LogError("Error sending game start to " + client.username + ": " + e.Message);
+                            Debug.LogError($"[SERVER] Error sending game start: {e.Message}");
                         }
                         playerID++;
                     }
@@ -299,7 +319,7 @@ public class UDPServer : MonoBehaviour
             }
             else
             {
-                Debug.LogWarning("Not enough players to start the game");
+                Debug.LogWarning("[SERVER] Not enough players to start game");
             }
         }
     }
@@ -309,9 +329,7 @@ public class UDPServer : MonoBehaviour
         SimpleMessage gameOverMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
         if (gameOverMsg != null)
         {
-            Debug.Log("Server received GAME_OVER - Winner: Player " + gameOverMsg.content);
             BroadcastMessage(gameOverMsg);
-            gameStarted = false;
         }
     }
 
@@ -320,13 +338,12 @@ public class UDPServer : MonoBehaviour
         SimpleMessage keyMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
         if (keyMsg != null)
         {
-            Debug.Log("Server received KEY_COLLECTED from Player " + keyMsg.content);
-
-            SimpleMessage updateMsg = new SimpleMessage("UPDATE_KEY_STATE", keyMsg.content);
-            BroadcastMessage(updateMsg);
-
-            SimpleMessage hideMsg = new SimpleMessage("HIDE_KEY", "");
-            BroadcastMessage(hideMsg);
+            // Broadcast KEY_COLLECTED to all clients
+            BroadcastMessage(keyMsg);
+            
+            // Send HIDE_KEY to hide the key object on all clients
+            SimpleMessage hideKeyMsg = new SimpleMessage("HIDE_KEY", "");
+            BroadcastMessage(hideKeyMsg);
         }
     }
 
@@ -335,12 +352,11 @@ public class UDPServer : MonoBehaviour
         KeyTransferMessage transferMsg = NetworkSerializer.Deserialize<KeyTransferMessage>(buffer, length);
         if (transferMsg != null)
         {
-            Debug.Log("[SERVER] Key transferred from Player " + transferMsg.fromPlayerID + " to Player " + transferMsg.toPlayerID);
             BroadcastMessage(transferMsg);
         }
     }
 
-    private void BroadcastMessage(NetworkMessage message, ClientInfo exclude = null)
+    private void BroadcastMessage<T>(T message, ClientInfo excludeClient = null) where T : NetworkMessage
     {
         byte[] data = NetworkSerializer.Serialize(message);
         if (data == null) return;
@@ -349,7 +365,8 @@ public class UDPServer : MonoBehaviour
         {
             foreach (ClientInfo client in connectedClients)
             {
-                if (exclude != null && client == exclude) continue;
+                if (excludeClient != null && client.endpoint.Equals(excludeClient.endpoint))
+                    continue;
 
                 try
                 {
@@ -357,29 +374,39 @@ public class UDPServer : MonoBehaviour
                 }
                 catch (Exception e)
                 {
-                    Debug.LogError($"[SERVER] Error broadcasting to {client.username}: {e.Message}");
+                    Debug.LogError($"[SERVER] Error broadcasting: {e.Message}");
                 }
             }
         }
     }
 
-    void Shutdown()
+    private void OnDestroy()
+    {
+        Shutdown();
+    }
+
+    private void OnApplicationQuit()
+    {
+        Shutdown();
+    }
+
+    private void Shutdown()
     {
         if (hasShutdown) return;
         hasShutdown = true;
+
         isRunning = false;
 
-        Debug.Log("[SERVER] Shutting down...");
-        try
+        if (serverSocket != null)
         {
-            if (serverSocket != null)
+            try
             {
                 serverSocket.Close();
             }
+            catch (Exception e)
+            {
+                Debug.LogError($"[SERVER] Error closing socket: {e.Message}");
+            }
         }
-        catch { }
     }
-
-    void OnApplicationQuit() => Shutdown();
-    void OnDestroy() => Shutdown();
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 [Serializable]
 public class NetworkMessage
@@ -102,4 +103,22 @@ public class KeyTransferMessage : NetworkMessage
         toPlayerID = to;
     }
 }
-// ELIMINA TODA LA CLASE PushMessage de aquí
+
+[Serializable]
+public class PushMessage : NetworkMessage
+{
+    public int pushedPlayerID;
+    public float velocityX;
+    public float velocityY;
+    public float duration;
+
+    public PushMessage() : base("PUSH") { }
+
+    public PushMessage(int playerID, Vector2 velocity, float dur) : base("PUSH")
+    {
+        pushedPlayerID = playerID;
+        velocityX = velocity.x;
+        velocityY = velocity.y;
+        duration = dur;
+    }
+}
