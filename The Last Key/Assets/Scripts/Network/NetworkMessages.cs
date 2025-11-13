@@ -122,3 +122,46 @@ public class PushMessage : NetworkMessage
         duration = dur;
     }
 }
+
+[Serializable]
+public class LevelTransitionMessage : NetworkMessage
+{
+    public int playerID;
+    public bool wantsToContinue;
+
+    public LevelTransitionMessage() : base("LEVEL_TRANSITION") { }
+
+    public LevelTransitionMessage(int id, bool continues) : base("LEVEL_TRANSITION")
+    {
+        playerID = id;
+        wantsToContinue = continues;
+    }
+}
+
+[Serializable]
+public class LoadSceneMessage : NetworkMessage
+{
+    public string sceneName;
+
+    public LoadSceneMessage() : base("LOAD_SCENE") { }
+
+    public LoadSceneMessage(string scene) : base("LOAD_SCENE")
+    {
+        sceneName = scene;
+    }
+}
+
+[Serializable]
+public class LevelCompleteMessage : NetworkMessage
+{
+    public string nextLevelName;
+
+    public LevelCompleteMessage() : base("LEVEL_COMPLETE") { }
+
+    public LevelCompleteMessage(string nextLevel) : base("LEVEL_COMPLETE")
+    {
+        nextLevelName = nextLevel;
+    }
+}
+
+

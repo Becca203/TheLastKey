@@ -16,6 +16,11 @@ public class UDPServer : MonoBehaviour
     private object clientsLock = new object();
     private bool gameStarted = false;
 
+    // Variables for level transition
+    private Dictionary<int, bool> levelTransitionVotes = new Dictionary<int, bool>();
+    private object votesLock = new object();
+    private string nextLevelName = "";
+
     private class ClientInfo
     {
         public IPEndPoint endpoint;
@@ -146,9 +151,6 @@ public class UDPServer : MonoBehaviour
             case "START_GAME":
                 ProcessStartGameRequest();
                 break;
-            case "GAME_OVER":
-                ProcessGameOverMessage(buffer, length);
-                break;
             case "KEY_COLLECTED":
                 ProcessKeyCollectedMessage(buffer, length, client);
                 break;
@@ -157,6 +159,12 @@ public class UDPServer : MonoBehaviour
                 break;
             case "PUSH":
                 ProcessPushMessage(buffer, length);
+                break;
+            case "LEVEL_TRANSITION":
+                ProcessLevelTransitionMessage(buffer, length, client);
+                break;
+            case "LEVEL_COMPLETE":
+                ProcessLevelCompleteMessage(buffer, length);
                 break;
             default:
                 Debug.LogWarning("[SERVER] Unknown message type: " + msgType);
@@ -324,15 +332,6 @@ public class UDPServer : MonoBehaviour
         }
     }
 
-    private void ProcessGameOverMessage(byte[] buffer, int length)
-    {
-        SimpleMessage gameOverMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
-        if (gameOverMsg != null)
-        {
-            BroadcastMessage(gameOverMsg);
-        }
-    }
-
     private void ProcessKeyCollectedMessage(byte[] buffer, int length, ClientInfo client)
     {
         SimpleMessage keyMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
@@ -353,6 +352,47 @@ public class UDPServer : MonoBehaviour
         if (transferMsg != null)
         {
             BroadcastMessage(transferMsg);
+        }
+    }
+
+    private void ProcessLevelTransitionMessage(byte[] buffer, int length, ClientInfo client)
+    {
+        LevelTransitionMessage transitionMsg = NetworkSerializer.Deserialize<LevelTransitionMessage>(buffer, length);
+        if (transitionMsg != null)
+        {
+            lock (votesLock)
+            {
+                levelTransitionVotes[transitionMsg.playerID] = transitionMsg.wantsToContinue;
+                Debug.Log($"[SERVER] Player {transitionMsg.playerID} voted: {(transitionMsg.wantsToContinue ? "Continue" : "Return")}");
+                
+                // Check if all players have voted
+                if (levelTransitionVotes.Count == connectedClients.Count)
+                {
+                    bool anyReturn = false;
+
+                    foreach (var vote in levelTransitionVotes.Values)
+                    {
+                        if (!vote) anyReturn = true;
+                    }
+
+                    string targetScene = anyReturn ? "MainMenu" : nextLevelName;
+                    LoadSceneMessage sceneMsg = new LoadSceneMessage(targetScene);
+                    BroadcastMessage(sceneMsg);
+
+                    levelTransitionVotes.Clear();
+                    nextLevelName = "";
+                }
+            }
+        }
+    }
+
+    private void ProcessLevelCompleteMessage(byte[] buffer, int length)
+    {
+        SimpleMessage completeMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
+        if (completeMsg != null)
+        {
+            nextLevelName = completeMsg.content;
+            BroadcastMessage(completeMsg);
         }
     }
 

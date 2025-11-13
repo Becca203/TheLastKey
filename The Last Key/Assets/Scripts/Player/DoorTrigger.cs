@@ -5,11 +5,27 @@ using UnityEngine.SceneManagement;
 public class DoorTrigger : MonoBehaviour
 {
     [SerializeField] private string winnerTag = "Player";
-    private bool gameEnded = false;
+    [SerializeField] private string nextLevelName = "";
+
+    private bool levelCompleted = false;
+    private LevelTransitionUI transitionUI;
+
+    private void Start()
+    {
+        transitionUI = FindAnyObjectByType<LevelTransitionUI>();
+        if (transitionUI == null) 
+            Debug.LogError("LevelTransitionUI not found in the scene.");
+
+        if (string.IsNullOrEmpty(nextLevelName))
+        {
+            nextLevelName = GetNextLevelName();
+            Debug.Log($"[DoorTrigger] Auto-detected next level: {nextLevelName}");
+        }
+    }
 
     private void OnTriggerEnter2D(Collider2D collision)
     {
-        if (gameEnded) return;
+        if (levelCompleted) return;
 
         if (collision.CompareTag(winnerTag))
         {
@@ -18,38 +34,55 @@ public class DoorTrigger : MonoBehaviour
             if (networkPlayer != null && networkPlayer.hasKey)
             {
                 Debug.Log("Player " + networkPlayer.playerID + " reached the door with the key!");
-                
-                // Solo el jugador local envía el mensaje
+
+                levelCompleted = true;
+
                 if (networkPlayer.isLocalPlayer)
-                {
-                    gameEnded = true;
-                    SendGameOverMessage(networkPlayer.playerID);
-                }
+                    SendLevelCompletedMessage(networkPlayer.playerID);
+
+                if (transitionUI != null)
+                    transitionUI.ShowPanel();
             }
-            else if (networkPlayer != null)
+            else if (networkPlayer != null && !networkPlayer.hasKey)
             {
                 Debug.Log("Player " + networkPlayer.playerID + " doesn't have the key!");
             }
         }
     }
 
-    private void SendGameOverMessage(int playerID)
+    private void SendLevelCompletedMessage(int playerID)
     {
         UDPClient udpClient = FindAnyObjectByType<UDPClient>();
         if (udpClient != null)
         {
-            SimpleMessage gameOverMsg = new SimpleMessage("GAME_OVER", playerID.ToString());
-            byte[] data = NetworkSerializer.Serialize(gameOverMsg);
+            SimpleMessage completeMsg = new SimpleMessage("LEVEL_COMPLETE", nextLevelName);
+            byte[] data = NetworkSerializer.Serialize(completeMsg);
 
             if (data != null)
-            {
                 udpClient.SendBytes(data);
-                Debug.Log("Sent GAME_OVER message to server for Player " + playerID);
+        }
+    }
+
+    private string GetNextLevelName()
+    {
+        string currentScene = SceneManager.GetActiveScene().name;
+
+        if (currentScene == "GameScene")
+        {
+            return "Level2";
+        }
+
+        if (currentScene.StartsWith("Level"))
+        {
+            string numberPart = currentScene.Replace("Level", "");
+            if (int.TryParse(numberPart, out int levelNumber))
+            {
+                return $"Level{levelNumber + 1}";
             }
         }
-        else
-        {
-            Debug.LogError("UDPClient not found!");
-        }
+
+        // Fallback: try GameScene (Level1)
+        Debug.LogWarning($"[DoorTrigger] Could not determine next level from '{currentScene}', defaulting to Level1");
+        return "GameScene";
     }
 }

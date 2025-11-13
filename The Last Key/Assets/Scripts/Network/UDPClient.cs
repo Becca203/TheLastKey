@@ -24,10 +24,8 @@ public class UDPClient : MonoBehaviour
     private WaitingRoom waitingRoom;
     private bool shouldLoadWaitingRoom = false;
     private bool shouldLoadGameScene = false;
-    private bool shouldLoadGameOverScene = false;
 
     private int assignedPlayerID = 0;
-    private int winnerID = 0;
     private bool shouldSetPlayerID = false;
 
     private struct PositionUpdate
@@ -87,6 +85,12 @@ public class UDPClient : MonoBehaviour
     private bool hasPendingPush = false;
     private object pushLock = new object();
 
+    // Queue for scene load requests
+    private string pendingSceneToLoad = null;
+    private bool hasPendingSceneToLoad = false;
+    private object sceneLoadLock = new object();
+    private string nextLevelName = "";
+
     /// <summary>
     /// Manual initialization called by NetworkManager after setting serverIP and username
     /// </summary>
@@ -129,14 +133,6 @@ public class UDPClient : MonoBehaviour
         {
             shouldLoadGameScene = false;
             SceneManager.LoadScene("GameScene");
-        }
-
-        if (shouldLoadGameOverScene)
-        {
-            shouldLoadGameOverScene = false;
-            PlayerPrefs.SetInt("WinnerPlayerID", winnerID);
-            PlayerPrefs.Save();
-            SceneManager.LoadScene("GameOverScene");
         }
 
         if (shouldSetPlayerID)
@@ -306,6 +302,21 @@ public class UDPClient : MonoBehaviour
                 hasPendingPush = false;
             }
         }
+
+        // Process scene load requests on main thread
+        if (hasPendingSceneToLoad)
+        {
+            lock (sceneLoadLock)
+            {
+                if (!string.IsNullOrEmpty(pendingSceneToLoad))
+                {
+                    Debug.Log($"[CLIENT] Loading scene: {pendingSceneToLoad}");
+                    SceneManager.LoadScene(pendingSceneToLoad);
+                }
+                hasPendingSceneToLoad = false;
+                pendingSceneToLoad = null;
+            }
+        }
     }
 
     public void InitializeSocket()
@@ -453,9 +464,6 @@ public class UDPClient : MonoBehaviour
             case "POSITION":
                 ProcessPositionMessage(buffer, length);
                 break;
-            case "GAME_OVER":
-                ProcessGameOverMessage(buffer, length);
-                break;
             case "KEY_COLLECTED":
                 ProcessKeyCollectedMessage(buffer, length);
                 break;
@@ -468,22 +476,15 @@ public class UDPClient : MonoBehaviour
             case "PUSH":
                 ProcessPushMessage(buffer, length);
                 break;
+            case "LOAD_SCENE":
+                ProcessLoadSceneMessage(buffer, length);
+                break;
+            case "LEVEL_COMPLETE":
+                ProcessLevelCompleteMessage(buffer, length);
+                break;
             default:
                 Debug.LogWarning("[CLIENT] Unknown message type: " + msgType);
                 break;
-        }
-    }
-
-    private void ProcessGameOverMessage(byte[] buffer, int length)
-    {
-        SimpleMessage gameOverMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
-        if (gameOverMsg != null)
-        {
-            if (int.TryParse(gameOverMsg.content, out int id))
-            {
-                winnerID = id;
-                shouldLoadGameOverScene = true;
-            }
         }
     }
 
@@ -629,6 +630,33 @@ public class UDPClient : MonoBehaviour
                     duration = pushMsg.duration
                 };
                 hasPendingPush = true;
+            }
+        }
+    }
+
+    private void ProcessLoadSceneMessage(byte[] buffer, int length)
+    {
+        LoadSceneMessage sceneMsg = NetworkSerializer.Deserialize<LoadSceneMessage>(buffer, length);
+        if (sceneMsg != null)
+        {
+            lock (sceneLoadLock)
+            {
+                pendingSceneToLoad = sceneMsg.sceneName;
+                hasPendingSceneToLoad = true;
+            }
+        }
+    }
+
+    private void ProcessLevelCompleteMessage(byte[] buffer, int length)
+    {
+        SimpleMessage completeMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
+        if (completeMsg != null)
+        {
+            nextLevelName = completeMsg.content;
+            LevelTransitionUI transitionUI = FindAnyObjectByType<LevelTransitionUI>();
+            if (transitionUI != null)
+            {
+                transitionUI.ShowPanel();
             }
         }
     }
