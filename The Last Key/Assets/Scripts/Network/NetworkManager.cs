@@ -119,38 +119,4 @@ public class NetworkManager : MonoBehaviour
         serverIP = "127.0.0.1";
         playerName = "";
     }
-
-    public bool IsHost()
-    {
-        return currentRole == NetworkRole.Host;
-    }
-
-    public bool IsClient()
-    {
-        return currentRole == NetworkRole.Client;
-    }
-
-    public UDPClient GetClient()
-    {
-        return clientInstance;
-    }
-
-    public UDPServer GetServer()
-    {
-        return serverInstance;
-    }
-
-    public string GetLocalIPAddress()
-    {
-        if (serverInstance != null)
-        {
-            return serverInstance.GetServerIP();    
-        }
-        return "Not available";
-    }
-
-    private void OnApplicationQuit()
-    {
-        // Cleanup handled by individual components
-    }
 }

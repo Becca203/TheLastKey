@@ -30,47 +30,7 @@ public class UDPServer : MonoBehaviour
 
     private void Start()
     {
-        ShowAvailableIPs();
         CreateAndBindTheSocket();
-    }
-
-    private void ShowAvailableIPs()
-    {
-        string hostName = Dns.GetHostName();
-        IPHostEntry hostEntry = Dns.GetHostEntry(hostName);
-
-        Debug.Log("===== SERVER AVAILABLE IPs =====");
-        foreach (IPAddress ip in hostEntry.AddressList)
-        {
-            if (ip.AddressFamily == AddressFamily.InterNetwork)
-            {
-                Debug.Log($"IPv4: {ip}");
-            }
-        }
-        Debug.Log("================================");
-    }
-
-    public string GetServerIP()
-    {
-        try
-        {
-            string hostName = Dns.GetHostName();
-            IPHostEntry hostEntry = Dns.GetHostEntry(hostName);
-
-            foreach (IPAddress ip in hostEntry.AddressList)
-            {
-                if (ip.AddressFamily == AddressFamily.InterNetwork)
-                {
-                    return ip.ToString();
-                }
-            }
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"[SERVER] Error getting IP: {e.Message}");
-        }
-
-        return "127.0.0.1";
     }
 
     private void CreateAndBindTheSocket()
