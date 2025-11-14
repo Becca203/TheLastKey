@@ -311,7 +311,19 @@ public class UDPClient : MonoBehaviour
                 if (!string.IsNullOrEmpty(pendingSceneToLoad))
                 {
                     Debug.Log($"[CLIENT] Loading scene: {pendingSceneToLoad}");
+                    if (Time.timeScale == 0f) Time.timeScale = 1f;
+                  
+                    bool isReturningToMenu = (pendingSceneToLoad == "MainMenu");
                     SceneManager.LoadScene(pendingSceneToLoad);
+
+                    if (isReturningToMenu)
+                    {
+                        if (NetworkManager.Instance != null)
+                            NetworkManager.Instance.ResetNetwork();
+
+                        if (GameManager.Instance != null)
+                            Destroy(GameManager.Instance.gameObject);
+                    }
                 }
                 hasPendingSceneToLoad = false;
                 pendingSceneToLoad = null;

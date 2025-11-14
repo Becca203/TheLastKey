@@ -101,6 +101,25 @@ public class NetworkManager : MonoBehaviour
         clientInstance.Initialize();
     }
 
+    public void ResetNetwork()
+    {
+        if (serverInstance != null)
+        {
+            Destroy(serverInstance.gameObject);
+            serverInstance = null;
+        }
+
+        if (clientInstance != null)
+        {
+            Destroy(clientInstance.gameObject);
+            clientInstance = null;
+        }
+
+        currentRole = NetworkRole.None;
+        serverIP = "127.0.0.1";
+        playerName = "";
+    }
+
     public bool IsHost()
     {
         return currentRole == NetworkRole.Host;

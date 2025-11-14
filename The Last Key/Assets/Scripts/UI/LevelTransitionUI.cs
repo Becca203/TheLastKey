@@ -11,6 +11,7 @@ public class LevelTransitionUI : MonoBehaviour
 
     private UDPClient udpClient;
     private bool hasVoted = false;
+    private float previousTimeScale = 1f;
 
     private void Start()
     {
@@ -28,9 +29,13 @@ public class LevelTransitionUI : MonoBehaviour
     {
         if (panel != null)
         {
+            previousTimeScale = Time.timeScale;
+            Time.timeScale = 0f;
+
             panel.SetActive(true);
             hasVoted = false;
             UpdateStatusText("Waiting for your decision...");
+            EnableButtons();
         }
     }
 
@@ -71,6 +76,14 @@ public class LevelTransitionUI : MonoBehaviour
         }
     }
 
+    private void EnableButtons()
+    {
+        if (continueButton != null)
+            continueButton.interactable = true;
+        if (returnButton != null)
+            returnButton.interactable = true;
+    }
+
     private void DisableButtons()
     {
         if (continueButton != null)
@@ -84,5 +97,11 @@ public class LevelTransitionUI : MonoBehaviour
     {
         if (statusText != null)
             statusText.text = message;
+    }
+
+    private void OnDestroy()
+    {
+        if (Time.timeScale == 0f)
+            Time.timeScale = previousTimeScale;
     }
 }
