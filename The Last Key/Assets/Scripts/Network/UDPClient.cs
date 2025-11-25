@@ -494,9 +494,83 @@ public class UDPClient : MonoBehaviour
             case "LEVEL_COMPLETE":
                 ProcessLevelCompleteMessage(buffer, length);
                 break;
+            case "REPLICATION":
+                ProcessReplicationPacket(buffer, length);
+                break;
             default:
                 Debug.LogWarning("[CLIENT] Unknown message type: " + msgType);
                 break;
+        }
+    }
+
+    private void ProcessReplicationPacket(byte[] buffer, int length)
+    {
+        ReplicationPacket packet = NetworkSerializer.Deserialize<ReplicationPacket>(buffer, length);
+        if (packet != null)
+        {
+            Debug.Log($"[UDPClient] Received replication packet with {packet.commands.Count} commands");
+
+            foreach (ReplicationCommand command in packet.commands)
+            {
+                ProcessReplicationCommand(command);
+            }
+        }
+    }
+
+    private void ProcessReplicationCommand(ReplicationCommand command)
+    {
+        switch (command.action)
+        {
+            case "UPDATE":
+                UpdateReplicatedObject(command);
+                break;
+            case "CREATE":
+                CreateReplicatedObject(command);
+                break;
+            case "DESTROY":
+                DestroyReplicatedObject(command);
+                break;
+            default:
+                Debug.LogWarning($"[UDPClient] Unknown replication action: {command.action}");
+                break;
+        }
+    }
+
+    private void UpdateReplicatedObject(ReplicationCommand command)
+    {
+        GameObject obj = NetworkIDManager.Instance?.GetObjectByID(command.networkID);
+
+        if (obj != null)
+        {
+            obj.transform.position = command.GetPosition();
+
+            NetworkPlayer player = obj.GetComponent<NetworkPlayer>();
+            if (player != null && !player.isLocalPlayer)
+            {
+                player.SetHasKey(command.hasKey);
+
+                Rigidbody2D rb = obj.GetComponent<Rigidbody2D>();
+                if (rb != null)
+                {
+                    rb.linearVelocity = command.GetVelocity();
+                }
+            }
+        }
+    }
+
+    private void CreateReplicatedObject(ReplicationCommand command)
+    {
+        // New future objects 
+        Debug.Log($"[UDPClient] Would create object: {command.objectType} with ID: {command.networkID}");
+    }
+
+    private void DestroyReplicatedObject(ReplicationCommand command)
+    {
+        GameObject obj = NetworkIDManager.Instance?.GetObjectByID(command.networkID);
+        if (obj != null)
+        {
+            Destroy(obj);
+            NetworkIDManager.Instance.UnregisterObject(obj);
         }
     }
 

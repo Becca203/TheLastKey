@@ -98,6 +98,21 @@ public class GameManager : MonoBehaviour
             remotePlayerObject = player1Instance;
         }
 
+        if (NetworkIDManager.Instance != null)
+        {
+            if (localPlayerObject != null)
+            {
+                int localID = NetworkIDManager.Instance.RegisterObject(localPlayerObject);
+                Debug.Log($"Registered local player with NetworkID: {localID}");
+            }
+
+            if (remotePlayerObject != null)
+            {
+                int remoteID = NetworkIDManager.Instance.RegisterObject(remotePlayerObject);
+                Debug.Log($"Registered remote player with NetworkID: {remoteID}");
+            }
+        }
+
         SetupLocalPlayer();
         SetupRemotePlayer();
     }

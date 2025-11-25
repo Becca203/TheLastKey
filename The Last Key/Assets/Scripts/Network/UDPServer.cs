@@ -21,6 +21,10 @@ public class UDPServer : MonoBehaviour
     private object votesLock = new object();
     private string nextLevelName = "";
 
+    // Variables for replication
+    private ReplicationManager replicationManager;
+    private NetworkIDManager idManager;
+
     private class ClientInfo
     {
         public IPEndPoint endpoint;
@@ -31,6 +35,24 @@ public class UDPServer : MonoBehaviour
     private void Start()
     {
         CreateAndBindTheSocket();
+        InitializeReplicationSystem();
+    }
+
+    private void InitializeReplicationSystem()
+    {
+        if (NetworkIDManager.Instance == null)
+        {
+            GameObject idManagerObj = new GameObject("NetworkIDManager");
+            idManager = idManagerObj.AddComponent<NetworkIDManager>();
+            DontDestroyOnLoad(idManagerObj);
+        }
+        else
+        {
+            idManager = NetworkIDManager.Instance;
+        }
+
+        replicationManager = gameObject.AddComponent<ReplicationManager>();
+        Debug.Log("[UDPServer] Replication system initialized");
     }
 
     private void CreateAndBindTheSocket()
@@ -238,15 +260,26 @@ public class UDPServer : MonoBehaviour
     {
         if (!gameStarted) return;
 
+        int playerID = sender.playerID;
+        GameObject playerObj = FindPlayerObject(playerID);
+
+        if (playerObj != null && replicationManager != null)
+        {
+            int networkID = idManager.GetIDForObject(playerObj);
+            if (networkID == -1)
+                networkID = idManager.RegisterObject(playerObj);
+            replicationManager.QueueAction(networkID, "UPDATE", playerObj);
+        }
+
         lock (clientsLock)
         {
-            foreach (ClientInfo client in connectedClients)
+            foreach (ClientInfo otherClient in connectedClients)
             {
-                if (client != sender)
+                if (otherClient != sender)
                 {
                     try
                     {
-                        serverSocket.SendTo(buffer, length, SocketFlags.None, client.endpoint);
+                        serverSocket.SendTo(buffer, length, SocketFlags.None, sender.endpoint);
                     }
                     catch (Exception e)
                     {
@@ -255,6 +288,17 @@ public class UDPServer : MonoBehaviour
                 }
             }
         }
+    }
+
+    private GameObject FindPlayerObject(int playerID)
+    {
+        NetworkPlayer[] players = FindObjectsOfType<NetworkPlayer>();
+        foreach (NetworkPlayer player in players)
+        {
+            if (player.playerID == playerID)
+                return player.gameObject;
+        }
+        return null;
     }
 
     private void ProcessStartGameRequest()
@@ -377,6 +421,18 @@ public class UDPServer : MonoBehaviour
                     Debug.LogError($"[SERVER] Error broadcasting: {e.Message}");
                 }
             }
+        }
+    }
+
+    public void SendToClient(byte[] data, IPEndPoint endpoint)
+    {
+        try
+        {
+            serverSocket.SendTo(data, endpoint);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"[UDPServer] Error sending to client: {e.Message}");
         }
     }
 
