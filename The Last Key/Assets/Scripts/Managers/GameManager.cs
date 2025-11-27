@@ -13,6 +13,9 @@ public class GameManager : MonoBehaviour
     public Transform player1SpawnPoint;
     public Transform player2SpawnPoint;
 
+    [Header("Camera Prefab")]
+    public GameObject playerCameraPrefab;
+
     [Header("Network")]
     public int localPlayerID = 0; 
 
@@ -21,6 +24,7 @@ public class GameManager : MonoBehaviour
     private PlayerMovement2D localPlayerMovement;
     private NetworkPlayer localNetworkPlayer;
     private NetworkPlayer remoteNetworkPlayer;
+    private GameObject localPlayerCameraObject;
 
     private UDPClient udpClient;
 
@@ -49,6 +53,7 @@ public class GameManager : MonoBehaviour
         if (scene.name == "GameScene")
         {
             InitializePlayers();
+            SetupPlayerCamera();
         }
     }
 
@@ -137,6 +142,31 @@ public class GameManager : MonoBehaviour
         Debug.Log("Remote player configured: " + remotePlayerObject.name);
     }
 
+    private void SetupPlayerCamera()
+    {
+        if (localPlayerObject == null || playerCameraPrefab == null)
+        {
+            Debug.LogWarning("Cannot setup camera: localPlayer or cameraPrefab is null");
+            return;
+        }
+
+        // Instanciar la cámara del jugador local
+        localPlayerCameraObject = Instantiate(playerCameraPrefab);
+        localPlayerCameraObject.name = "PlayerCamera_Local";
+        
+        // Configurar el controlador de cámara
+        PlayerCameraController cameraController = localPlayerCameraObject.GetComponent<PlayerCameraController>();
+        if (cameraController != null)
+        {
+            cameraController.SetTarget(localPlayerObject.transform);
+            
+            // Opcional: configurar límites basados en el nivel
+            // cameraController.SetBounds(new Vector2(-20, -10), new Vector2(20, 10));
+        }
+        
+        Debug.Log("Player camera setup complete for local player");
+    }
+
     public void UpdateRemotePlayerPosition(int playerID, Vector3 position, Vector2 velocity)
     {
         if (remoteNetworkPlayer != null && remoteNetworkPlayer.playerID == playerID)
@@ -144,6 +174,7 @@ public class GameManager : MonoBehaviour
             remoteNetworkPlayer.UpdatePosition(position, velocity);
         }
     }
+    
     public NetworkPlayer FindPlayerByID(int id)
     {
         if (localNetworkPlayer != null && localNetworkPlayer.playerID == id)
