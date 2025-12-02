@@ -21,7 +21,6 @@ public class GameManager : MonoBehaviour
     private PlayerMovement2D localPlayerMovement;
     private NetworkPlayer localNetworkPlayer;
     private NetworkPlayer remoteNetworkPlayer;
-    private GameObject localPlayerCameraObject;
 
     private UDPClient udpClient;
 
