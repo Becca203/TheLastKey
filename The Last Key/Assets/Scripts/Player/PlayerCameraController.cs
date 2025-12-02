@@ -7,7 +7,7 @@ public class PlayerCameraController : MonoBehaviour
 {
     [Header("Camera References")]
     [SerializeField] private Camera playerCamera;
-    [SerializeField] private Camera mainCamera;
+    private Camera mainCamera;
 
     [Header("Target")]
     [SerializeField] private Transform target;
@@ -15,8 +15,6 @@ public class PlayerCameraController : MonoBehaviour
     [Header("Camera Settings")]
     [SerializeField] private float followSpeed = 5f;
     [SerializeField] private Vector3 offset = new Vector3(0, 2f, -10f);
-    [SerializeField] private float zoomedOrthographicSize = 3f;
-    [SerializeField] private float defaultOrthographicSize = 5f;
 
     [Header("Bounds (Optional)")]
     [SerializeField] private bool useBounds = false;
@@ -28,6 +26,9 @@ public class PlayerCameraController : MonoBehaviour
 
     void Start()
     {
+        // Buscar automáticamente la Main Camera en la escena
+        FindMainCamera();
+
         // Obtener referencia al NetworkPlayer
         if (target != null)
         {
@@ -53,6 +54,32 @@ public class PlayerCameraController : MonoBehaviour
         }
     }
 
+    private void FindMainCamera()
+    {
+        // Buscar la cámara con tag "MainCamera"
+        GameObject mainCameraObj = GameObject.FindGameObjectWithTag("MainCamera");
+        
+        if (mainCameraObj != null)
+        {
+            mainCamera = mainCameraObj.GetComponent<Camera>();
+            Debug.Log("[PlayerCameraController] Main Camera found and assigned");
+        }
+        else
+        {
+            // Alternativa: buscar por nombre
+            mainCameraObj = GameObject.Find("Main Camera");
+            if (mainCameraObj != null)
+            {
+                mainCamera = mainCameraObj.GetComponent<Camera>();
+                Debug.Log("[PlayerCameraController] Main Camera found by name");
+            }
+            else
+            {
+                Debug.LogWarning("[PlayerCameraController] Main Camera not found in scene!");
+            }
+        }
+    }
+
     private void SetupCameras()
     {
         if (networkPlayer != null && networkPlayer.isLocalPlayer)
@@ -61,7 +88,7 @@ public class PlayerCameraController : MonoBehaviour
             if (playerCamera != null)
             {
                 playerCamera.enabled = true;
-                playerCamera.orthographicSize = zoomedOrthographicSize;
+                // NO modificar el orthographicSize - mantener el valor del prefab
             }
 
             if (mainCamera != null)
@@ -70,6 +97,7 @@ public class PlayerCameraController : MonoBehaviour
             }
 
             usePlayerCamera = true;
+            Debug.Log("[PlayerCameraController] Local player camera setup complete");
         }
         else
         {
@@ -92,13 +120,19 @@ public class PlayerCameraController : MonoBehaviour
                 playerCamera.enabled = usePlayerCamera;
                 mainCamera.enabled = !usePlayerCamera;
 
-                Debug.Log($"Switched to {(usePlayerCamera ? "Player" : "Main")} Camera");
+                Debug.Log($"[PlayerCameraController] Switched to {(usePlayerCamera ? "Player" : "Main")} Camera");
+            }
+            else if (mainCamera == null)
+            {
+                Debug.LogWarning("[PlayerCameraController] Cannot switch: Main Camera not found!");
             }
         }
     }
 
     private void FollowTarget()
     {
+        if (playerCamera == null) return;
+
         Vector3 desiredPosition = target.position + offset;
 
         // Aplicar límites si están habilitados
