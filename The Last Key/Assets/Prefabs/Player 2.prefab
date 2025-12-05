@@ -370,12 +370,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   playerCamera: {fileID: 7830310644552189677}
-  mainCamera: {fileID: 0}
   target: {fileID: 7048437652931505221}
   followSpeed: 5
   offset: {x: 0, y: 2, z: -10}
-  zoomedOrthographicSize: 2
-  defaultOrthographicSize: 5
   useBounds: 0
   minBounds: {x: 0, y: 0}
   maxBounds: {x: 0, y: 0}
@@ -396,7 +393,7 @@ MonoBehaviour:
   pushForceHorizontal: 15
   pushForceVertical: 20
   pushGravity: 60
-  pushDuration: 0.5
+  pushDuration: 5
   playerTag: Player
 --- !u!1 &8811335804389986363
 GameObject:
@@ -409,7 +406,6 @@ GameObject:
   - component: {fileID: 6686063992313497130}
   - component: {fileID: 7830310644552189677}
   - component: {fileID: 8140333977962287036}
-  - component: {fileID: 1948544076241452368}
   - component: {fileID: 5663128371172192903}
   m_Layer: 0
   m_Name: PlayerCamera
@@ -492,20 +488,6 @@ AudioListener:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8811335804389986363}
   m_Enabled: 1
---- !u!114 &1948544076241452368
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8811335804389986363}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 570bbbef86ddee64f8ce192baf694c65, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  minBounds: {x: -20, y: -10}
-  maxBounds: {x: 20, y: 10}
 --- !u!114 &5663128371172192903
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -75,10 +75,12 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
 
     private void FixedUpdate()
     {
-        // Si está siendo empujado, permitir solo movimiento horizontal
+        // Si está siendo empujado, permitir solo movimiento horizontal limitado
         if (_networkPlayer != null && _networkPlayer.isPushed)
         {
             HandleDirectionDuringPush();
+            HandleGravity(); // IMPORTANT: Still apply gravity
+            ApplyMovement(); // IMPORTANT: Still apply movement
             return;
         }
 

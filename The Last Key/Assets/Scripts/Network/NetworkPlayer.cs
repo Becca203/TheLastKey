@@ -8,6 +8,7 @@ public class NetworkPlayer : MonoBehaviour
     [Header("Network Settings")]
     [SerializeField] private float sendRate = 20f;
     [SerializeField] private float interpolationSpeed = 10f;
+    [SerializeField] private float pushedInterpolationSpeed = 20f; // Faster for pushed state
 
     [Header("Key Status")]
     public bool hasKey = false;
@@ -48,13 +49,16 @@ public class NetworkPlayer : MonoBehaviour
         if (isPushed && Time.time >= pushRecoveryTime)
         {
             isPushed = false;
-            Debug.Log("Player " + playerID + " recovered from push");
+            Debug.Log($"[NetworkPlayer] Player {playerID} recovered from push at position {transform.position}");
         }
 
         if (isLocalPlayer)
         {
+            // Increase send rate during push for better synchronization
+            float currentSendRate = isPushed ? (sendRate * 3f) : sendRate;
+            
             sendTimer += Time.deltaTime;
-            if (sendTimer >= 1f / sendRate)
+            if (sendTimer >= 1f / currentSendRate)
             {
                 SendPositionUpdate();
                 sendTimer = 0f;
@@ -62,8 +66,10 @@ public class NetworkPlayer : MonoBehaviour
         }
         else
         {
+            // Remote player - interpolate to network position
             if (!isPushed)
             {
+                // Normal interpolation
                 transform.position = Vector3.Lerp(
                     transform.position,
                     targetPosition,
@@ -76,6 +82,24 @@ public class NetworkPlayer : MonoBehaviour
                         rb.linearVelocity,
                         targetVelocity,
                         interpolationSpeed * Time.fixedDeltaTime
+                    );
+                }
+            }
+            else
+            {
+                // When pushed, use faster interpolation for more responsive movement
+                transform.position = Vector3.Lerp(
+                    transform.position,
+                    targetPosition,
+                    pushedInterpolationSpeed * Time.deltaTime
+                );
+
+                if (rb != null)
+                {
+                    rb.linearVelocity = Vector2.Lerp(
+                        rb.linearVelocity,
+                        targetVelocity,
+                        pushedInterpolationSpeed * Time.fixedDeltaTime
                     );
                 }
             }
@@ -103,8 +127,25 @@ public class NetworkPlayer : MonoBehaviour
 
     public void UpdatePosition(Vector3 position, Vector2 velocity)
     {
+        // ALWAYS update target position for both local and remote players
         targetPosition = position;
         targetVelocity = velocity;
+        
+        // If LOCAL player and pushed, apply physics directly from network
+        if (isLocalPlayer && isPushed)
+        {
+            transform.position = position;
+            if (rb != null)
+            {
+                rb.linearVelocity = velocity;
+            }
+            Debug.Log($"[NetworkPlayer] Pushed LOCAL Player {playerID} position updated: {position}, vel: {velocity}");
+        }
+        // If REMOTE player and pushed, the Update() loop will interpolate faster
+        else if (!isLocalPlayer && isPushed)
+        {
+            Debug.Log($"[NetworkPlayer] Pushed REMOTE Player {playerID} target position updated: {position}, vel: {velocity}");
+        }
     }
 
     public void SetHasKey(bool value)
@@ -115,7 +156,7 @@ public class NetworkPlayer : MonoBehaviour
         if (playerMovement != null)
         {
             playerMovement.SetHasKey(value);
-            Debug.Log("Player " + playerID + " hasKey changed from " + previousValue + " to " + value);
+            Debug.Log($"[NetworkPlayer] Player {playerID} hasKey changed from {previousValue} to {value}");
         }
     }
 
@@ -131,7 +172,7 @@ public class NetworkPlayer : MonoBehaviour
     {
         if (!isLocalPlayer) return;
 
-        Debug.Log("Player " + playerID + " stealing key from Player " + targetPlayerID);
+        Debug.Log($"[NetworkPlayer] Player {playerID} stealing key from Player {targetPlayerID}");
         SendKeyTransferMessage(targetPlayerID, playerID);
     }
 
@@ -140,7 +181,7 @@ public class NetworkPlayer : MonoBehaviour
         isPushed = true;
         pushRecoveryTime = Time.time + duration;
         
-        Debug.Log("Player " + playerID + " is pushed for " + duration + " seconds");
+        Debug.Log($"[NetworkPlayer] Player {playerID} is pushed for {duration} seconds (isLocal: {isLocalPlayer})");
     }
 
     private void SendKeyCollectedMessage()

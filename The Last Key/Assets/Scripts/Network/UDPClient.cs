@@ -61,7 +61,7 @@ public class UDPClient : MonoBehaviour
     private int pendingKeyCollectedPlayerID = -1;
     private bool hasPendingKeyCollected = false;
     private object keyCollectedLock = new object();
-
+    
     // Queue for hide key
     private bool shouldHideKey = false;
     private object hideKeyLock = new object();
@@ -292,17 +292,46 @@ public class UDPClient : MonoBehaviour
                 GameManager gameManager = GameManager.Instance;
                 if (gameManager != null)
                 {
-                    NetworkPlayer player = gameManager.FindPlayerByID(pendingPush.playerID);
-                    if (player != null && !player.isLocalPlayer)
+                    NetworkPlayer targetPlayer = gameManager.FindPlayerByID(pendingPush.playerID);
+                    
+                    if (targetPlayer != null)
                     {
-                        Rigidbody2D rb = player.GetComponent<Rigidbody2D>();
-                        if (rb != null)
+                        // Only apply push to LOCAL player (the one being pushed on this machine)
+                        if (targetPlayer.isLocalPlayer)
                         {
-                            rb.linearVelocity = pendingPush.velocity;
-                            player.StartPush(pendingPush.duration);
+                            Rigidbody2D rb = targetPlayer.GetComponent<Rigidbody2D>();
+                            if (rb != null)
+                            {
+                                Debug.Log($"[CLIENT] Applying PUSH to LOCAL Player {targetPlayer.playerID}");
+                                Debug.Log($"[CLIENT] Push velocity: {pendingPush.velocity}, duration: {pendingPush.duration}s");
+                                
+                                // Apply the push force
+                                rb.linearVelocity = pendingPush.velocity;
+                                targetPlayer.StartPush(pendingPush.duration);
+                            }
+                            else
+                            {
+                                Debug.LogError($"[CLIENT] Rigidbody2D not found on Player {targetPlayer.playerID}");
+                            }
+                        }
+                        else
+                        {
+                            // Remote player - the pusher already applied it locally
+                            Debug.Log($"[CLIENT] Skipping push for REMOTE Player {targetPlayer.playerID} (already applied by pusher)");
                         }
                     }
+                    else
+                    {
+                        Debug.LogError($"[CLIENT] Player {pendingPush.playerID} not found for push");
+                    }
                 }
+                else
+                {
+                    Debug.LogWarning("[CLIENT] GameManager not found, retrying push...");
+                    hasPendingPush = true; // Retry next frame
+                    return;
+                }
+                
                 hasPendingPush = false;
             }
         }
@@ -620,6 +649,8 @@ public class UDPClient : MonoBehaviour
         PushMessage pushMsg = NetworkSerializer.Deserialize<PushMessage>(buffer, length);
         if (pushMsg != null)
         {
+            Debug.Log($"[CLIENT] Received PUSH message: targetID={pushMsg.pushedPlayerID}, vel=({pushMsg.velocityX}, {pushMsg.velocityY}), dur={pushMsg.duration}");
+            
             lock (pushLock)
             {
                 pendingPush = new PushData
