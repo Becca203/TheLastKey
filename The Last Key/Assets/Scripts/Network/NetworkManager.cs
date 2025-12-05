@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 
 /// <summary>
 /// Singleton that manages the network role and persists across scenes
@@ -21,8 +22,8 @@ public class NetworkManager : MonoBehaviour
     public int serverPort = 9050;
 
     [Header("References")]
-    private UDPServer serverInstance;
-    private UDPClient clientInstance;
+    private Networking serverNetworking;  
+    private Networking clientNetworking; 
 
     private void Awake()
     {
@@ -53,19 +54,19 @@ public class NetworkManager : MonoBehaviour
         serverIP = "127.0.0.1";
 
         // Create server first
-        GameObject serverObj = new GameObject("UDPServer");
+        GameObject serverObj = new GameObject("Networking_Server");
         serverObj.transform.SetParent(transform);
-        serverInstance = serverObj.AddComponent<UDPServer>();
+        serverNetworking = serverObj.AddComponent<Networking>();
+        serverNetworking.Initialize(Networking.NetworkMode.Server, serverIP, hostName);
 
-        // Wait a frame for server to initialize, then create client
         StartCoroutine(CreateClientAfterServerReady());
     }
 
-    private System.Collections.IEnumerator CreateClientAfterServerReady()
+    private IEnumerator CreateClientAfterServerReady()
     {
-        // Wait 1 frame for server socket to bind
-        yield return null;
-        
+        yield return new WaitForSeconds(0.5f);
+
+        Debug.Log("[NetworkManager] Server ready, creating client...");
         CreateClient();
     }
 
@@ -89,34 +90,33 @@ public class NetworkManager : MonoBehaviour
 
     private void CreateClient()
     {
-        GameObject clientObj = new GameObject("UDPClient");
-        clientObj.transform.SetParent(transform);
-        clientInstance = clientObj.AddComponent<UDPClient>();
-        
-        // Configure client before initialization
-        clientInstance.serverIP = serverIP;
-        clientInstance.username = playerName;
+        if (clientNetworking != null) return; 
 
-        // Initialize the client (sends handshake)
-        clientInstance.Initialize();
+        GameObject clientObj = new GameObject("Networking_Client");
+        clientObj.transform.SetParent(transform);
+        clientNetworking = clientObj.AddComponent<Networking>();
+        clientNetworking.Initialize(Networking.NetworkMode.Client, serverIP, playerName);
+        Debug.Log($"[NetworkManager] Client created and connecting to {serverIP}");
     }
 
     public void ResetNetwork()
     {
-        if (serverInstance != null)
+        if (serverNetworking != null)
         {
-            Destroy(serverInstance.gameObject);
-            serverInstance = null;
+            Destroy(serverNetworking.gameObject);
+            serverNetworking = null;
         }
 
-        if (clientInstance != null)
+        if (clientNetworking != null)
         {
-            Destroy(clientInstance.gameObject);
-            clientInstance = null;
+            Destroy(clientNetworking.gameObject);
+            clientNetworking = null;
         }
 
         currentRole = NetworkRole.None;
         serverIP = "127.0.0.1";
         playerName = "";
+
+        Debug.Log("[NetworkManager] Network reset complete");
     }
 }

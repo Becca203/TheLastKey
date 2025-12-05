@@ -9,7 +9,7 @@ public class LevelTransitionUI : MonoBehaviour
     public Button continueButton;
     public Button returnButton;
 
-    private UDPClient udpClient;
+    private Networking networking;
     private bool hasVoted = false;
     private float previousTimeScale = 1f;
 
@@ -22,7 +22,7 @@ public class LevelTransitionUI : MonoBehaviour
         if (returnButton != null) 
             returnButton.onClick.AddListener(OnReturnClicked);
 
-        udpClient = FindAnyObjectByType<UDPClient>();
+        networking = FindAnyObjectByType<Networking>();
     }
 
     public void ShowPanel()
@@ -59,7 +59,7 @@ public class LevelTransitionUI : MonoBehaviour
 
     private void SendVote(bool wantsToContinue)
     {
-        if (udpClient == null) return;
+        if (networking == null) return;
 
         GameManager gameManager = GameManager.Instance;
         if (gameManager != null)
@@ -70,7 +70,7 @@ public class LevelTransitionUI : MonoBehaviour
 
             if (data != null)
             {
-                udpClient.SendBytes(data);
+                networking.SendBytes(data);
                 Debug.Log($"Player {playerID} voted: {(wantsToContinue ? "Continue" : "Return")}");
             }
         }

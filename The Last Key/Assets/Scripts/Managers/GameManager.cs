@@ -22,7 +22,7 @@ public class GameManager : MonoBehaviour
     private NetworkPlayer localNetworkPlayer;
     private NetworkPlayer remoteNetworkPlayer;
 
-    private UDPClient udpClient;
+    private Networking networking;
 
     void Awake()
     {
@@ -37,8 +37,8 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
-        if (udpClient != null)
-            udpClient = FindAnyObjectByType<UDPClient>();
+        if (networking == null)
+            networking = FindAnyObjectByType<Networking>();
     }
 
     void OnEnable() => SceneManager.sceneLoaded += OnSceneLoaded;

@@ -52,14 +52,21 @@ public class DoorTrigger : MonoBehaviour
 
     private void SendLevelCompletedMessage(int playerID)
     {
-        UDPClient udpClient = FindAnyObjectByType<UDPClient>();
-        if (udpClient != null)
+         Networking networking = FindAnyObjectByType<Networking>();
+        if (networking != null)
         {
             SimpleMessage completeMsg = new SimpleMessage("LEVEL_COMPLETE", nextLevelName);
             byte[] data = NetworkSerializer.Serialize(completeMsg);
 
             if (data != null)
-                udpClient.SendBytes(data);
+            {
+                networking.SendBytes(data);
+                Debug.Log($"[DoorTrigger] Sent LEVEL_COMPLETE message for next level: {nextLevelName}");
+            }
+        }
+        else
+        {
+            Debug.LogError("[DoorTrigger] Networking component not found!");
         }
     }
 

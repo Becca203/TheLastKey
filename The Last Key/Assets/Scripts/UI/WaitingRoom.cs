@@ -26,6 +26,7 @@ public class WaitingRoom : MonoBehaviour
 
         if (playButton != null)
         {
+            playButton.gameObject.SetActive(true);
             playButton.interactable = false;
             playButton.onClick.AddListener(OnPlayButtonClicked);
         }
@@ -43,25 +44,42 @@ public class WaitingRoom : MonoBehaviour
 
     public void OnPlayButtonClicked()
     {
-        UDPClient udpClient = FindAnyObjectByType<UDPClient>();
-        if (udpClient != null)
+        Networking networking = FindAnyObjectByType<Networking>();
+        if (networking != null)
         {
             SimpleMessage startMsg = new SimpleMessage("START_GAME", "");
             byte[] data = NetworkSerializer.Serialize(startMsg);
-            udpClient.SendBytes(data);
+            if (data != null)
+            {
+                networking.SendBytes(data);
+                Debug.Log("[WaitingRoom] Sent START_GAME request");
+            
+                if (playButton != null)
+                {
+                    playButton.interactable = false;
+                    TextMeshProUGUI buttonText = playButton.GetComponentInChildren<TextMeshProUGUI>();
+                    if (buttonText != null)
+                    {
+                        buttonText.text = "WAITING...";
+                    }
+                }
+            
+                AddChatMessage("System", GetMyUsername() + " is ready!");
+            }
         }
     }
 
     private string GetMyUsername()
     {
-        UDPClient udpClient = FindAnyObjectByType<UDPClient>();
-        if (udpClient != null) return udpClient.username;
+        Networking networking = FindAnyObjectByType<Networking>();
+        if (networking != null) return networking.username;
         return "";
     }
 
     private bool IsServer()
     {
-        return FindAnyObjectByType<UDPServer>() != null;
+        Networking networking = FindAnyObjectByType<Networking>();
+        return networking != null && networking.mode == Networking.NetworkMode.Server;
     }
 
     private void UpdateInfo()
@@ -111,8 +129,8 @@ public class WaitingRoom : MonoBehaviour
 
     private void SendChatToServer(string message)
     {
-        UDPClient udpClient = FindAnyObjectByType<UDPClient>();
-        if (udpClient != null) udpClient.SendChatMessage(message);
+        Networking networking = FindAnyObjectByType<Networking>();
+        if (networking != null) networking.SendChatMessage(message);
     }
 
     public void AddChatMessage(string sender, string message)
@@ -126,6 +144,11 @@ public class WaitingRoom : MonoBehaviour
         else
         {
             formattedMessage = "<color=purple>" + sender + "</color>: " + message;
+        }
+
+        if (chatMessages.Count > 0 && chatMessages[chatMessages.Count - 1] == formattedMessage)
+        {
+            return;
         }
 
         chatMessages.Add(formattedMessage);

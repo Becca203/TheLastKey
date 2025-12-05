@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 
 public class PlayerPushDetector : MonoBehaviour
 {
@@ -121,20 +122,20 @@ public class PlayerPushDetector : MonoBehaviour
 
     private void SendPushMessage(int targetPlayerID, Vector2 velocity, float duration)
     {
-        UDPClient udpClient = FindAnyObjectByType<UDPClient>();
-        if (udpClient != null)
+        Networking networking = FindAnyObjectByType<Networking>();
+        if (networking != null)
         {
             PushMessage pushMsg = new PushMessage(targetPlayerID, velocity, duration);
             byte[] data = NetworkSerializer.Serialize(pushMsg);
             
             if (data != null)
             {
-                udpClient.SendBytes(data);
+                networking.SendBytes(data);
             }
         }
     }
 
-    private System.Collections.IEnumerator ApplyPushGravity(Rigidbody2D rb, float duration)
+    private IEnumerator ApplyPushGravity(Rigidbody2D rb, float duration)
     {
         float elapsed = 0f;
         

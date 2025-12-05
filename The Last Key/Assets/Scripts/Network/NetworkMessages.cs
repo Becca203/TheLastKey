@@ -80,12 +80,12 @@ public class GameStartMessage : NetworkMessage
 public class SimpleMessage : NetworkMessage
 {
     public string content;
-
-    public SimpleMessage(string type) : base(type) { }
-
-    public SimpleMessage(string type, string data) : base(type)
+    
+    public SimpleMessage() : base("SIMPLE") { }
+    
+    public SimpleMessage(string type, string msg) : base(type)
     {
-        content = data;
+        content = msg;
     }
 }
 

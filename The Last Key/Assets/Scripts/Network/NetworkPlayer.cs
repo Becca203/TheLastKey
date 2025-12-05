@@ -17,7 +17,7 @@ public class NetworkPlayer : MonoBehaviour
     private float pushRecoveryTime = 0f;
 
     private Rigidbody2D rb;
-    private UDPClient udpClient;
+    private Networking networking;
     private PlayerMovement2D playerMovement;
     private float sendTimer = 0f;
 
@@ -27,10 +27,10 @@ public class NetworkPlayer : MonoBehaviour
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
-        udpClient = FindAnyObjectByType<UDPClient>();
+        networking = FindAnyObjectByType<Networking>();
         playerMovement = GetComponent<PlayerMovement2D>();
 
-        if (udpClient == null)
+        if (networking == null)
         {
             Debug.LogError("UDPClient not found");
         }
@@ -84,7 +84,7 @@ public class NetworkPlayer : MonoBehaviour
 
     private void SendPositionUpdate()
     {
-        if (udpClient == null || rb == null) return;
+        if (networking == null || rb == null) return;
 
         PositionMessage posMsg = new PositionMessage(
             playerID,
@@ -97,7 +97,7 @@ public class NetworkPlayer : MonoBehaviour
         byte[] data = NetworkSerializer.Serialize(posMsg);
         if (data != null)
         {
-            udpClient.SendBytes(data);
+            networking.SendBytes(data);
         }
     }
 
@@ -145,7 +145,7 @@ public class NetworkPlayer : MonoBehaviour
 
     private void SendKeyCollectedMessage()
     {
-        if (udpClient == null)
+        if (networking == null)
         {
             Debug.LogError("UDPClient not found!");
             return;
@@ -156,14 +156,14 @@ public class NetworkPlayer : MonoBehaviour
 
         if (data != null)
         {
-            udpClient.SendBytes(data);
+            networking.SendBytes(data);
             Debug.Log("KEY_COLLECTED message sent for Player " + playerID);
         }
     }
 
     private void SendKeyTransferMessage(int fromPlayer, int toPlayer)
     {
-        if (udpClient == null)
+        if (networking == null)
         {
             Debug.LogError("UDPClient not found!");
             return;
@@ -174,7 +174,7 @@ public class NetworkPlayer : MonoBehaviour
 
         if (data != null)
         {
-            udpClient.SendBytes(data);
+            networking.SendBytes(data);
             Debug.Log("KEY_TRANSFER sent: from Player " + fromPlayer + " to Player " + toPlayer);
         }
     }
