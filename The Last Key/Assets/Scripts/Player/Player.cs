@@ -75,7 +75,6 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
 
     private void FixedUpdate()
     {
-        // Si está siendo empujado, permitir solo movimiento horizontal
         if (_networkPlayer != null && _networkPlayer.isPushed)
         {
             HandleDirectionDuringPush();
@@ -89,12 +88,10 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
         ApplyMovement();
     }
 
-    // Nuevo método para controlar movimiento horizontal durante el empuje
     private void HandleDirectionDuringPush()
     {
         if (_frameInput.Move.x != 0)
         {
-            // Solo modifica la velocidad horizontal, mantiene la vertical del empuje
             Vector2 currentVel = _rb.linearVelocity;
             currentVel.x = Mathf.MoveTowards(currentVel.x, _frameInput.Move.x * _stats.MaxSpeed, _stats.AirDeceleration * Time.fixedDeltaTime);
             _rb.linearVelocity = currentVel;

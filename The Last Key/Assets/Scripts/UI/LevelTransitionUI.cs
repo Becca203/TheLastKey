@@ -22,7 +22,7 @@ public class LevelTransitionUI : MonoBehaviour
         if (returnButton != null) 
             returnButton.onClick.AddListener(OnReturnClicked);
 
-        // BUSCAR EL NETWORKING EN MODO CLIENT (no Server)
+        // Find Client mode Networking component
         Networking[] allNetworkings = FindObjectsByType<Networking>(FindObjectsSortMode.None);
         foreach (Networking net in allNetworkings)
         {
@@ -80,7 +80,6 @@ public class LevelTransitionUI : MonoBehaviour
             return;
         }
 
-        // Verificar que sea modo Client antes de enviar
         if (networking.mode != Networking.NetworkMode.Client)
         {
             Debug.LogError($"[LevelTransitionUI] Wrong networking mode: {networking.mode}. Need Client mode!");

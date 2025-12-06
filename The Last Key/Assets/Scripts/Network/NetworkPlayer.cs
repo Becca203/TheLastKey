@@ -28,7 +28,7 @@ public class NetworkPlayer : MonoBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         
-        // BUSCAR NETWORKING EN MODO CLIENT
+        // Find Client mode Networking component
         Networking[] allNetworkings = FindObjectsByType<Networking>(FindObjectsSortMode.None);
         foreach (Networking net in allNetworkings)
         {

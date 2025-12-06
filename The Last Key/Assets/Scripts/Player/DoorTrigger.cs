@@ -52,7 +52,7 @@ public class DoorTrigger : MonoBehaviour
 
     private void SendLevelCompletedMessage(int playerID)
     {
-        // BUSCAR NETWORKING EN MODO CLIENT (igual que en LevelTransitionUI)
+        // Find Client mode Networking component
         Networking clientNetworking = null;
         Networking[] allNetworkings = FindObjectsByType<Networking>(FindObjectsSortMode.None);
         

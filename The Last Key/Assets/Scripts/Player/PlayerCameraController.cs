@@ -1,8 +1,6 @@
 using UnityEngine;
 
-/// <summary>
-/// Controla la cámara individual de cada jugador con capacidad de alternar a vista general
-/// </summary>
+/// Controla la cï¿½mara individual de cada jugador con capacidad de alternar a vista general
 public class PlayerCameraController : MonoBehaviour
 {
     [Header("Camera References")]
@@ -26,28 +24,25 @@ public class PlayerCameraController : MonoBehaviour
 
     void Start()
     {
-        // Buscar automáticamente la Main Camera en la escena
         FindMainCamera();
 
-        // Obtener referencia al NetworkPlayer
         if (target != null)
         {
             networkPlayer = target.GetComponent<NetworkPlayer>();
         }
 
-        // Configurar las cámaras al inicio
         SetupCameras();
     }
 
     void Update()
     {
-        // Solo permitir el cambio de cámara si es el jugador local
+        // Solo permitir el cambio de cï¿½mara si es el jugador local
         if (networkPlayer != null && networkPlayer.isLocalPlayer)
         {
             HandleCameraSwitch();
         }
 
-        // Seguir al objetivo si está usando la cámara del jugador
+        // Seguir al objetivo si estï¿½ usando la cï¿½mara del jugador
         if (usePlayerCamera && target != null)
         {
             FollowTarget();
@@ -56,7 +51,6 @@ public class PlayerCameraController : MonoBehaviour
 
     private void FindMainCamera()
     {
-        // Buscar la cámara con tag "MainCamera"
         GameObject mainCameraObj = GameObject.FindGameObjectWithTag("MainCamera");
         
         if (mainCameraObj != null)
@@ -66,7 +60,6 @@ public class PlayerCameraController : MonoBehaviour
         }
         else
         {
-            // Alternativa: buscar por nombre
             mainCameraObj = GameObject.Find("Main Camera");
             if (mainCameraObj != null)
             {
@@ -84,7 +77,7 @@ public class PlayerCameraController : MonoBehaviour
     {
         if (networkPlayer != null && networkPlayer.isLocalPlayer)
         {
-            // Jugador local: activar su cámara personal, desactivar main camera
+            // Jugador local: activar su cï¿½mara personal, desactivar main camera
             if (playerCamera != null)
             {
                 playerCamera.enabled = true;
@@ -101,7 +94,7 @@ public class PlayerCameraController : MonoBehaviour
         }
         else
         {
-            // Jugador remoto: desactivar su cámara (no la necesita)
+            // Jugador remoto: desactivar su cï¿½mara (no la necesita)
             if (playerCamera != null)
             {
                 playerCamera.enabled = false;
@@ -135,7 +128,7 @@ public class PlayerCameraController : MonoBehaviour
 
         Vector3 desiredPosition = target.position + offset;
 
-        // Aplicar límites si están habilitados
+        // Aplicar lï¿½mites si estï¿½n habilitados
         if (useBounds)
         {
             desiredPosition.x = Mathf.Clamp(desiredPosition.x, minBounds.x, maxBounds.x);
@@ -153,7 +146,7 @@ public class PlayerCameraController : MonoBehaviour
     }
 
     /// <summary>
-    /// Configura el objetivo de la cámara (llamado desde GameManager)
+    /// Configura el objetivo de la cï¿½mara (llamado desde GameManager)
     /// </summary>
     public void SetTarget(Transform newTarget)
     {
@@ -165,7 +158,7 @@ public class PlayerCameraController : MonoBehaviour
     }
 
     /// <summary>
-    /// Establece los límites de la cámara (útil para diferentes niveles)
+    /// Establece los lï¿½mites de la cï¿½mara (ï¿½til para diferentes niveles)
     /// </summary>
     public void SetBounds(Vector2 min, Vector2 max)
     {

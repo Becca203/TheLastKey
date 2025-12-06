@@ -9,8 +9,6 @@ public class KeyBehaviour : MonoBehaviour
     private void OnTriggerEnter2D(Collider2D collision)
     {
         if (isCollected) return;
-        
-        // Pequeño cooldown para evitar doble trigger
         if (Time.time < cooldownTimer) return;
 
         if (collision.CompareTag(playerTag))
@@ -19,19 +17,15 @@ public class KeyBehaviour : MonoBehaviour
             
             if (networkPlayer != null && networkPlayer.isLocalPlayer)
             {
-                Debug.Log($"[KeyBehaviour] Player {networkPlayer.playerID} attempting to collect key");
                 networkPlayer.CollectKey();
                 
                 isCollected = true;
-                cooldownTimer = Time.time + 0.5f; // Cooldown de 0.5s
+                cooldownTimer = Time.time + 0.5f;
                 gameObject.SetActive(false);
-                
-                Debug.Log($"[KeyBehaviour] Player {networkPlayer.playerID} collected the key locally!");
             }
         }
     }
     
-    // Método para mostrar la llave de nuevo si el servidor rechaza
     public void ShowKey()
     {
         isCollected = false;

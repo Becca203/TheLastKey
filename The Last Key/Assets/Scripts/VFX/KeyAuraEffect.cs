@@ -37,7 +37,6 @@ public class KeyAuraEffect : MonoBehaviour
 
     void CreateBlurLayers()
     {
-        // Limpia las capas anteriores si existen
         if (blurSprites != null)
         {
             foreach (var sr in blurSprites)
@@ -80,7 +79,6 @@ public class KeyAuraEffect : MonoBehaviour
     {
         if (blurSprites == null || blurSprites.Length == 0) return;
 
-        // Actualiza el sprite si el jugador cambia de animación
         if (playerSprite != null && blurSprites[0].sprite != playerSprite.sprite)
         {
             foreach (SpriteRenderer sr in blurSprites)
@@ -90,7 +88,6 @@ public class KeyAuraEffect : MonoBehaviour
             }
         }
 
-        // Efecto de pulsación
         float pulse = Mathf.Sin(Time.time * pulseSpeed) * pulseAmount;
 
         for (int i = 0; i < blurSprites.Length; i++)
@@ -106,7 +103,6 @@ public class KeyAuraEffect : MonoBehaviour
 
     void OnEnable()
     {
-        // SIEMPRE recrea las capas al activarse
         if (playerSprite == null)
             playerSprite = GetComponentInParent<SpriteRenderer>();
 
@@ -119,7 +115,6 @@ public class KeyAuraEffect : MonoBehaviour
 
     void OnDisable()
     {
-        // Limpia las capas cuando se desactiva
         if (blurSprites != null)
         {
             foreach (var sr in blurSprites)
