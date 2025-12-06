@@ -16,6 +16,8 @@ public class NetworkPlayer : MonoBehaviour
     public bool isPushed = false;
     private float pushRecoveryTime = 0f;
 
+    [SerializeField] private float pushGravity = 80f;
+
     private Rigidbody2D rb;
     private Networking networking;
     private PlayerMovement2D playerMovement;
@@ -54,6 +56,18 @@ public class NetworkPlayer : MonoBehaviour
 
         targetPosition = transform.position;
         targetVelocity = Vector2.zero;
+        
+        // VERIFICA ESTA LÍNEA:
+        if (!isLocalPlayer && rb != null)
+        {
+            rb.isKinematic = true;
+            Debug.Log($"[NetworkPlayer] Player {playerID} set to kinematic (remote)");
+        }
+        else if (isLocalPlayer && rb != null)
+        {
+            rb.isKinematic = false; // AÑADE ESTA LÍNEA
+            Debug.Log($"[NetworkPlayer] Player {playerID} is dynamic (local)");
+        }
     }
 
     void Update()
@@ -153,7 +167,30 @@ public class NetworkPlayer : MonoBehaviour
         isPushed = true;
         pushRecoveryTime = Time.time + duration;
         
-        Debug.Log("Player " + playerID + " is pushed for " + duration + " seconds");
+        Debug.Log($"[NetworkPlayer] Player {playerID} is pushed for {duration} seconds (isLocal: {isLocalPlayer})");
+        
+        // Start gravity coroutine if local player
+        if (isLocalPlayer && rb != null)
+        {
+            StartCoroutine(ApplyPushGravity(duration));
+        }
+    }
+
+    private System.Collections.IEnumerator ApplyPushGravity(float duration)
+    {
+        float elapsed = 0f;
+
+        while (elapsed < duration && rb != null && isPushed)
+        {
+            Vector2 currentVel = rb.linearVelocity;
+            currentVel.y -= pushGravity * Time.fixedDeltaTime;
+            rb.linearVelocity = currentVel;
+
+            elapsed += Time.fixedDeltaTime;
+            yield return new WaitForFixedUpdate();
+        }
+
+        Debug.Log($"[NetworkPlayer] Push gravity ended for Player {playerID}");
     }
 
     private void SendKeyCollectedMessage()

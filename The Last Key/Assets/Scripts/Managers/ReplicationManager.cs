@@ -212,19 +212,31 @@ public class ReplicationManager : MonoBehaviour
         }
     }
 
-    /// CLIENT: Processes push event on remote player
+    /// CLIENT: Processes push event - APPLIES TO LOCAL PLAYER
     public void ProcessPush(int playerID, Vector2 velocity, float duration)
     {
         NetworkPlayer player = GetPlayerByID(playerID);
-        if (player != null && !player.isLocalPlayer)
+        if (player != null && player.isLocalPlayer)  // CHANGED: Apply to LOCAL player
         {
             Rigidbody2D rb = player.GetComponent<Rigidbody2D>();
-            if (rb != null)
+            if (rb != null && !rb.isKinematic)
             {
+                Debug.Log($"[ReplicationManager] Applying PUSH to LOCAL Player {playerID}: vel={velocity}, dur={duration}");
                 rb.linearVelocity = velocity;
                 player.StartPush(duration);
-                Debug.Log($"[ReplicationManager] Player {playerID} pushed");
             }
+            else
+            {
+                Debug.LogWarning($"[ReplicationManager] Cannot apply push to Player {playerID}: rb is null or kinematic");
+            }
+        }
+        else if (player != null)
+        {
+            Debug.Log($"[ReplicationManager] Skipping push for REMOTE Player {playerID} (pusher already applied it locally)");
+        }
+        else
+        {
+            Debug.LogError($"[ReplicationManager] Player {playerID} not found for push");
         }
     }
 
