@@ -118,6 +118,12 @@ public class GameManager : MonoBehaviour
         localNetworkPlayer.isLocalPlayer = true;
         localNetworkPlayer.playerID = localPlayerID;
 
+        // Register with ReplicationManager
+        if (ReplicationManager.Instance != null)
+        {
+            ReplicationManager.Instance.RegisterPlayer(localPlayerID, localNetworkPlayer);
+        }
+
         Debug.Log("Local player configured: " + localPlayerObject.name);
     }
 
@@ -133,6 +139,12 @@ public class GameManager : MonoBehaviour
 
         remoteNetworkPlayer.isLocalPlayer = false;
         remoteNetworkPlayer.playerID = (localPlayerID == 1) ? 2 : 1;
+
+        // Register with ReplicationManager
+        if (ReplicationManager.Instance != null)
+        {
+            ReplicationManager.Instance.RegisterPlayer(remoteNetworkPlayer.playerID, remoteNetworkPlayer);
+        }
 
         Debug.Log("Remote player configured: " + remotePlayerObject.name);
     }

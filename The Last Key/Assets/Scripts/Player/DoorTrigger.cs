@@ -52,21 +52,34 @@ public class DoorTrigger : MonoBehaviour
 
     private void SendLevelCompletedMessage(int playerID)
     {
-         Networking networking = FindAnyObjectByType<Networking>();
-        if (networking != null)
+        // BUSCAR NETWORKING EN MODO CLIENT (igual que en LevelTransitionUI)
+        Networking clientNetworking = null;
+        Networking[] allNetworkings = FindObjectsByType<Networking>(FindObjectsSortMode.None);
+        
+        foreach (Networking net in allNetworkings)
+        {
+            if (net.mode == Networking.NetworkMode.Client)
+            {
+                clientNetworking = net;
+                Debug.Log("[DoorTrigger] Found Client Networking component");
+                break;
+            }
+        }
+
+        if (clientNetworking != null)
         {
             SimpleMessage completeMsg = new SimpleMessage("LEVEL_COMPLETE", nextLevelName);
             byte[] data = NetworkSerializer.Serialize(completeMsg);
 
             if (data != null)
             {
-                networking.SendBytes(data);
+                clientNetworking.SendBytes(data);
                 Debug.Log($"[DoorTrigger] Sent LEVEL_COMPLETE message for next level: {nextLevelName}");
             }
         }
         else
         {
-            Debug.LogError("[DoorTrigger] Networking component not found!");
+            Debug.LogError("[DoorTrigger] Client Networking component not found!");
         }
     }
 

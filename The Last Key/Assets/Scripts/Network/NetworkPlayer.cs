@@ -27,20 +27,33 @@ public class NetworkPlayer : MonoBehaviour
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
-        networking = FindAnyObjectByType<Networking>();
-        playerMovement = GetComponent<PlayerMovement2D>();
+        
+        // BUSCAR NETWORKING EN MODO CLIENT
+        Networking[] allNetworkings = FindObjectsByType<Networking>(FindObjectsSortMode.None);
+        foreach (Networking net in allNetworkings)
+        {
+            if (net.mode == Networking.NetworkMode.Client)
+            {
+                networking = net;
+                Debug.Log($"[NetworkPlayer {playerID}] Found Client Networking component");
+                break;
+            }
+        }
 
         if (networking == null)
         {
-            Debug.LogError("UDPClient not found");
+            Debug.LogError($"[NetworkPlayer {playerID}] Client Networking not found!");
         }
+
+        playerMovement = GetComponent<PlayerMovement2D>();
 
         if (playerMovement == null)
         {
-            Debug.LogError("PlayerMovement2D not found on Player " + playerID);
+            Debug.LogWarning("PlayerMovement2D component not found!");
         }
 
         targetPosition = transform.position;
+        targetVelocity = Vector2.zero;
     }
 
     void Update()

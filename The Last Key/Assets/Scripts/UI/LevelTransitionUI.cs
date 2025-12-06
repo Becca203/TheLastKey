@@ -22,7 +22,22 @@ public class LevelTransitionUI : MonoBehaviour
         if (returnButton != null) 
             returnButton.onClick.AddListener(OnReturnClicked);
 
-        networking = FindAnyObjectByType<Networking>();
+        // BUSCAR EL NETWORKING EN MODO CLIENT (no Server)
+        Networking[] allNetworkings = FindObjectsByType<Networking>(FindObjectsSortMode.None);
+        foreach (Networking net in allNetworkings)
+        {
+            if (net.mode == Networking.NetworkMode.Client)
+            {
+                networking = net;
+                Debug.Log("[LevelTransitionUI] Found Client Networking component");
+                break;
+            }
+        }
+
+        if (networking == null)
+        {
+            Debug.LogError("[LevelTransitionUI] No Client Networking component found!");
+        }
     }
 
     public void ShowPanel()
@@ -59,20 +74,41 @@ public class LevelTransitionUI : MonoBehaviour
 
     private void SendVote(bool wantsToContinue)
     {
-        if (networking == null) return;
+        if (networking == null)
+        {
+            Debug.LogError("[LevelTransitionUI] Networking is null!");
+            return;
+        }
+
+        // Verificar que sea modo Client antes de enviar
+        if (networking.mode != Networking.NetworkMode.Client)
+        {
+            Debug.LogError($"[LevelTransitionUI] Wrong networking mode: {networking.mode}. Need Client mode!");
+            return;
+        }
 
         GameManager gameManager = GameManager.Instance;
         if (gameManager != null)
         {
             int playerID = gameManager.localPlayerID;
+            Debug.Log($"[LevelTransitionUI] Sending vote for Player {playerID}: {(wantsToContinue ? "Continue" : "Return")}");
+            
             LevelTransitionMessage msg = new LevelTransitionMessage(playerID, wantsToContinue);
             byte[] data = NetworkSerializer.Serialize(msg);
 
             if (data != null)
             {
                 networking.SendBytes(data);
-                Debug.Log($"Player {playerID} voted: {(wantsToContinue ? "Continue" : "Return")}");
+                Debug.Log($"[LevelTransitionUI] Vote sent successfully");
             }
+            else
+            {
+                Debug.LogError("[LevelTransitionUI] Failed to serialize vote!");
+            }
+        }
+        else
+        {
+            Debug.LogError("[LevelTransitionUI] GameManager is null!");
         }
     }
 

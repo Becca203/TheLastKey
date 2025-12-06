@@ -1,9 +1,7 @@
 using UnityEngine;
 using System.Collections;
 
-/// <summary>
 /// Singleton that manages the network role and persists across scenes
-/// </summary>
 public class NetworkManager : MonoBehaviour
 {
     public static NetworkManager Instance { get; private set; }
@@ -36,11 +34,10 @@ public class NetworkManager : MonoBehaviour
 
         Instance = this;
         DontDestroyOnLoad(gameObject);
+        Debug.Log("[NetworkManager] Singleton initialized");
     }
 
-    /// <summary>
     /// Starts the server and client (Host mode)
-    /// </summary>
     public void StartAsHost(string hostName)
     {
         if (currentRole != NetworkRole.None)
@@ -53,26 +50,30 @@ public class NetworkManager : MonoBehaviour
         playerName = hostName;
         serverIP = "127.0.0.1";
 
+        Debug.Log($"[NetworkManager] Starting as Host with name: {hostName}");
+
         // Create server first
         GameObject serverObj = new GameObject("Networking_Server");
         serverObj.transform.SetParent(transform);
         serverNetworking = serverObj.AddComponent<Networking>();
+        
+        Debug.Log("[NetworkManager] Calling Initialize on server...");
         serverNetworking.Initialize(Networking.NetworkMode.Server, serverIP, hostName);
 
+        Debug.Log("[NetworkManager] Server component created, waiting before creating client...");
         StartCoroutine(CreateClientAfterServerReady());
     }
 
     private IEnumerator CreateClientAfterServerReady()
     {
+        Debug.Log("[NetworkManager] Waiting 0.5 seconds for server to initialize...");
         yield return new WaitForSeconds(0.5f);
 
         Debug.Log("[NetworkManager] Server ready, creating client...");
         CreateClient();
     }
 
-    /// <summary>
     /// Starts only the client (Join mode)
-    /// </summary>
     public void StartAsClient(string clientName, string targetIP)
     {
         if (currentRole != NetworkRole.None)
@@ -85,32 +86,43 @@ public class NetworkManager : MonoBehaviour
         playerName = clientName;
         serverIP = targetIP;
 
+        Debug.Log($"[NetworkManager] Starting as Client with name: {clientName}, connecting to: {targetIP}");
         CreateClient();
     }
 
     private void CreateClient()
     {
-        if (clientNetworking != null) return; 
+        if (clientNetworking != null)
+        {
+            Debug.LogWarning("[NetworkManager] Client already exists!");
+            return;
+        }
 
         GameObject clientObj = new GameObject("Networking_Client");
         clientObj.transform.SetParent(transform);
         clientNetworking = clientObj.AddComponent<Networking>();
+        
+        Debug.Log($"[NetworkManager] Calling Initialize on client (IP: {serverIP}, Name: {playerName})...");
         clientNetworking.Initialize(Networking.NetworkMode.Client, serverIP, playerName);
         Debug.Log($"[NetworkManager] Client created and connecting to {serverIP}");
     }
 
     public void ResetNetwork()
     {
+        Debug.Log("[NetworkManager] Resetting network...");
+
         if (serverNetworking != null)
         {
             Destroy(serverNetworking.gameObject);
             serverNetworking = null;
+            Debug.Log("[NetworkManager] Server networking destroyed");
         }
 
         if (clientNetworking != null)
         {
             Destroy(clientNetworking.gameObject);
             clientNetworking = null;
+            Debug.Log("[NetworkManager] Client networking destroyed");
         }
 
         currentRole = NetworkRole.None;

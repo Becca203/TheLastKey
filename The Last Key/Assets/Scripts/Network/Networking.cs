@@ -25,6 +25,9 @@ public class Networking : MonoBehaviour
     [SerializeField] private float pingInterval = 2f;
     [SerializeField] private float disconnectionTimeout = 30f;
 
+    [Header("Replication")]
+    private ReplicationManager replicationManager;
+
     // Socket
     private Socket socket;
     private IPEndPoint serverEndPoint;
@@ -44,6 +47,11 @@ public class Networking : MonoBehaviour
     private List<ClientProxy> connectedClients = new List<ClientProxy>();
     private object clientsLock = new object();
     private bool gameStarted = false;
+
+    // Key state management (server-authoritative)
+    private bool keyCollected = false;
+    private int keyOwnerPlayerID = -1;
+    private object keyStateLock = new object();
 
     // Level transition
     private Dictionary<int, bool> levelTransitionVotes = new Dictionary<int, bool>();
@@ -94,6 +102,10 @@ public class Networking : MonoBehaviour
     private string pendingSceneToLoad = null;
     private bool hasPendingSceneToLoad = false;
     private object sceneLoadLock = new object();
+
+    // NUEVA COLA PARA LEVEL COMPLETE
+    private bool shouldShowLevelTransitionUI = false;
+    private object levelCompleteLock = new object();
 
     private bool hasStarted = false;
 
@@ -146,6 +158,8 @@ public class Networking : MonoBehaviour
         mode = networkMode;
         serverIP = ip;
         username = user;
+        
+        Debug.Log($"[NETWORK] Initialize() called - Mode: {mode}, IP: {ip}, User: {user}");
     }
 
     void Start()
@@ -163,28 +177,52 @@ public class Networking : MonoBehaviour
             return;
         }
 
+        Debug.Log($"[NETWORK] Starting in {mode} mode...");
+
+        // Initialize ReplicationManager
+        replicationManager = gameObject.AddComponent<ReplicationManager>();
+        if (replicationManager != null)
+        {
+            replicationManager.Initialize(mode == NetworkMode.Server);
+            Debug.Log("[NETWORK] ReplicationManager initialized");
+        }
+        else
+        {
+            Debug.LogError("[NETWORK] Failed to create ReplicationManager!");
+        }
+
         CreateAndBindSocket();
+
+        if (socket == null)
+        {
+            Debug.LogError("[NETWORK] Failed to create socket! Check console for errors.");
+            return;
+        }
 
         if (mode == NetworkMode.Client)
         {
+            Debug.Log("[NETWORK] Sending handshake to server...");
             SendHandshake();
             connectionTimer = 0f;
             waitingForServerResponse = true;
         }
         else if (mode == NetworkMode.Server)
         {
-            Debug.Log($"[SERVER] Started on port {serverPort}");
+            Debug.Log($"[SERVER] Successfully started and listening on port {serverPort}");
         }
 
         isInitialized = true;
         lastPingTime = Time.time;
         lastPingReceived = DateTime.Now;
+        
+        Debug.Log($"[NETWORK] Initialization complete - isInitialized: {isInitialized}");
     }
 
     private void CreateAndBindSocket()
     {
         try
         {
+            Debug.Log($"[NETWORK] Creating socket for {mode} mode...");
             socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
             socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
 
@@ -204,11 +242,12 @@ public class Networking : MonoBehaviour
                     // Specific config for server socket
                     socket.Blocking = true;
 
-                    isInitialized = true;
-                    Debug.Log($"[SERVER] Started on Port {serverPort}. Listening on all IPs.");
+                    Debug.Log($"[SERVER] Socket bound to Port {serverPort}. Listening on all IPs.");
                 }
                 catch (Exception e)
                 {
+                    Debug.LogError($"[SERVER] Failed to bind socket: {e.Message}");
+                    Debug.LogError($"[SERVER] Stack trace: {e.StackTrace}");
                     try 
                     { 
                         socket.Close(); 
@@ -231,6 +270,7 @@ public class Networking : MonoBehaviour
                 }
                 catch (Exception e)
                 {
+                    Debug.LogError($"[CLIENT] Failed to bind socket: {e.Message}");
                     ReportError($"Failed to bind client socket: {e.Message}");
                     socket?.Close();
                     socket = null;
@@ -238,22 +278,38 @@ public class Networking : MonoBehaviour
                 }
 
                 socket.Blocking = true;
-                IPAddress serverAddr = IPAddress.Parse(serverIP);
-                serverEndPoint = new IPEndPoint(serverAddr, serverPort);
+                
+                try
+                {
+                    IPAddress serverAddr = IPAddress.Parse(serverIP);
+                    serverEndPoint = new IPEndPoint(serverAddr, serverPort);
+                    Debug.Log($"[CLIENT] Server endpoint set to {serverIP}:{serverPort}");
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError($"[CLIENT] Failed to parse server IP: {e.Message}");
+                    socket?.Close();
+                    socket = null;
+                    return;
+                }
             }
 
+            // Start receive thread
             Thread receiveThread = new Thread(ReceiveMessages)
             {
                 IsBackground = true,
-                Name = "UDP_Receive_Thread"
+                Name = $"UDP_Receive_Thread_{mode}"
             };
             receiveThread.Start();
 
-            Debug.Log($"[NETWORK] Socket created in {mode} mode");
+            Debug.Log($"[NETWORK] Socket created successfully in {mode} mode, receive thread started");
         }
         catch (Exception e)
         {
+            Debug.LogError($"[NETWORK] Socket creation failed: {e.Message}");
+            Debug.LogError($"[NETWORK] Stack trace: {e.StackTrace}");
             ReportError($"Socket creation failed: {e.Message}");
+            socket = null;
         }
     }
 
@@ -475,6 +531,7 @@ public class Networking : MonoBehaviour
                     if (player != null)
                     {
                         player.SetHasKey(true);
+                        Debug.Log($"[NETWORK] Main thread: Player {pendingKeyCollectedPlayerID} set hasKey=true");
                     }
                 }
                 hasPendingKeyCollected = false;
@@ -482,15 +539,16 @@ public class Networking : MonoBehaviour
             }
         }
 
-        // Hide key
+        // Hide key - AHORA SE PROCESA EN EL MAIN THREAD
         if (shouldHideKey)
         {
             lock (hideKeyLock)
             {
                 KeyBehaviour key = FindAnyObjectByType<KeyBehaviour>();
-                if (key != null)
+                if (key != null && key.gameObject.activeSelf)
                 {
                     key.gameObject.SetActive(false);
+                    Debug.Log("[NETWORK] Main thread: Key hidden");
                 }
                 shouldHideKey = false;
             }
@@ -511,6 +569,7 @@ public class Networking : MonoBehaviour
                     {
                         fromPlayer.SetHasKey(false);
                         toPlayer.SetHasKey(true);
+                        Debug.Log($"[NETWORK] Main thread: Key transferred from {pendingKeyTransfer.fromPlayerID} to {pendingKeyTransfer.toPlayerID}");
                     }
                 }
                 hasPendingKeyTransfer = false;
@@ -533,10 +592,26 @@ public class Networking : MonoBehaviour
                         {
                             rb.linearVelocity = pendingPush.velocity;
                             player.StartPush(pendingPush.duration);
+                            Debug.Log($"[NETWORK] Main thread: Player {pendingPush.playerID} pushed");
                         }
                     }
                 }
                 hasPendingPush = false;
+            }
+        }
+
+        // Level complete UI - NUEVA COLA PROCESADA EN MAIN THREAD
+        if (shouldShowLevelTransitionUI)
+        {
+            lock (levelCompleteLock)
+            {
+                LevelTransitionUI transitionUI = FindAnyObjectByType<LevelTransitionUI>();
+                if (transitionUI != null)
+                {
+                    transitionUI.ShowPanel();
+                    Debug.Log("[NETWORK] Main thread: Showing level transition UI");
+                }
+                shouldShowLevelTransitionUI = false;
             }
         }
 
@@ -681,6 +756,9 @@ public class Networking : MonoBehaviour
             case "LEVEL_COMPLETE":
                 ProcessLevelCompleteMessage(buffer, length);
                 break;
+            case "LEVEL_TRANSITION":
+                Debug.Log("[CLIENT] Received LEVEL_TRANSITION message (server-side only, ignoring)");
+                break;
             default:
                 Debug.LogWarning("[CLIENT] Unknown message type: " + msgType);
                 break;
@@ -790,6 +868,7 @@ public class Networking : MonoBehaviour
             {
                 pendingKeyCollectedPlayerID = playerID;
                 hasPendingKeyCollected = true;
+                Debug.Log($"[NETWORK] Thread: Queued KEY_COLLECTED for player {playerID}");
             }
         }
     }
@@ -799,6 +878,7 @@ public class Networking : MonoBehaviour
         lock (hideKeyLock)
         {
             shouldHideKey = true;
+            Debug.Log("[NETWORK] Thread: Queued HIDE_KEY");
         }
     }
 
@@ -815,6 +895,7 @@ public class Networking : MonoBehaviour
                     toPlayerID = transferMsg.toPlayerID
                 };
                 hasPendingKeyTransfer = true;
+                Debug.Log($"[NETWORK] Thread: Queued KEY_TRANSFER from {transferMsg.fromPlayerID} to {transferMsg.toPlayerID}");
             }
         }
     }
@@ -833,6 +914,7 @@ public class Networking : MonoBehaviour
                     duration = pushMsg.duration
                 };
                 hasPendingPush = true;
+                Debug.Log($"[NETWORK] Thread: Queued PUSH for player {pushMsg.pushedPlayerID}");
             }
         }
     }
@@ -858,10 +940,12 @@ public class Networking : MonoBehaviour
         if (completeMsg != null)
         {
             nextLevelName = completeMsg.content;
-            LevelTransitionUI transitionUI = FindAnyObjectByType<LevelTransitionUI>();
-            if (transitionUI != null)
+            
+            // NO USAR FindAnyObjectByType AQUÍ - usar cola
+            lock (levelCompleteLock)
             {
-                transitionUI.ShowPanel();
+                shouldShowLevelTransitionUI = true;
+                Debug.Log($"[NETWORK] Thread: Queued LEVEL_COMPLETE for next level: {nextLevelName}");
             }
         }
     }
@@ -937,7 +1021,7 @@ public class Networking : MonoBehaviour
             Debug.Log($"[SERVER] New client connected from {endpoint} (Total: {connectedClients.Count})");
 
             return newClient;
-            }
+        }
     }
 
     private void ProcessServerUsernameMessage(byte[] buffer, int length, ClientProxy client)
@@ -1031,10 +1115,8 @@ public class Networking : MonoBehaviour
             sender.lastPingTime = DateTime.Now;
         }
 
+        // IMPORTANTE: Broadcast a TODOS los demás clientes
         BroadcastMessage(posMsg, sender);
-        
-        Debug.Log($"[SERVER] Broadcasting position from Player {posMsg.playerID} to other clients");
-
     }
 
     private void ProcessStartGameRequest()
@@ -1061,6 +1143,14 @@ public class Networking : MonoBehaviour
 
                 gameStarted = true;
                 Debug.Log("[SERVER] Starting game with " + uniqueClients + " players");
+
+                // Reset key state for new game
+                lock (keyStateLock)
+                {
+                    keyCollected = false;
+                    keyOwnerPlayerID = -1;
+                    Debug.Log("[SERVER] Key state reset for new game");
+                }
 
                 // Assign player IDs and send GAME_START to all clients
                 int playerID = 1;
@@ -1094,46 +1184,143 @@ public class Networking : MonoBehaviour
 
     private void ProcessServerKeyCollectedMessage(byte[] buffer, int length, ClientProxy client)
     {
-        SimpleMessage keyMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
-        if (keyMsg != null)
+        if (client == null)
         {
-            BroadcastMessage(keyMsg);
-
-            SimpleMessage hideKeyMsg = new SimpleMessage("HIDE_KEY", "");
-            BroadcastMessage(hideKeyMsg);
+            Debug.LogError("[SERVER] ProcessServerKeyCollectedMessage called with null client!");
+            return;
         }
+
+        SimpleMessage keyMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
+        if (keyMsg != null && replicationManager != null)
+        {
+            if (int.TryParse(keyMsg.content, out int playerID))
+            {
+                Debug.Log($"[SERVER] Received KEY_COLLECTED request from Player {playerID} (client: {client.username})");
+                
+                // SERVER-SIDE VALIDATION
+                lock (keyStateLock)
+                {
+                    if (keyCollected)
+                    {
+                        // Key already collected, reject
+                        Debug.LogWarning($"[SERVER] REJECTED: Player {playerID} tried to collect key, but Player {keyOwnerPlayerID} already has it!");
+                        
+                        // Send correction to the client that tried to collect it
+                        SendKeyRejection(client.endpoint, keyOwnerPlayerID);
+                        return;
+                    }
+
+                    // Key available, authorize collection
+                    keyCollected = true;
+                    keyOwnerPlayerID = playerID;
+                    Debug.Log($"[SERVER] AUTHORIZED: Player {playerID} collected key successfully!");
+                }
+
+                // Replicate to all clients
+                Debug.Log($"[SERVER] Broadcasting key collection to all clients");
+                replicationManager.ReplicateKeyCollection(playerID);
+            }
+            else
+            {
+                Debug.LogError($"[SERVER] Failed to parse playerID from KEY_COLLECTED message: {keyMsg.content}");
+            }
+        }
+    }
+
+    private void SendKeyRejection(IPEndPoint clientEndpoint, int actualOwnerID)
+    {
+        // Force hide key locally
+        SimpleMessage hideKeyMsg = new SimpleMessage("HIDE_KEY", "");
+        byte[] hideData = NetworkSerializer.Serialize(hideKeyMsg);
+        if (hideData != null)
+        {
+            SendPacket(hideData, clientEndpoint);
+        }
+
+        // Send correct state of who has the key
+        SimpleMessage keyStateMsg = new SimpleMessage("KEY_COLLECTED", actualOwnerID.ToString());
+        byte[] keyData = NetworkSerializer.Serialize(keyStateMsg);
+        if (keyData != null)
+        {
+            SendPacket(keyData, clientEndpoint);
+        }
+
+        Debug.Log($"[SERVER] Sent key rejection to client, correct owner is Player {actualOwnerID}");
     }
 
     private void ProcessServerKeyTransferMessage(byte[] buffer, int length)
     {
         KeyTransferMessage transferMsg = NetworkSerializer.Deserialize<KeyTransferMessage>(buffer, length);
-        if (transferMsg != null)
+        if (transferMsg != null && replicationManager != null)
         {
-            BroadcastMessage(transferMsg);
+            // VALIDATION: can only transfer if actually has the key
+            lock (keyStateLock)
+            {
+                if (!keyCollected || keyOwnerPlayerID != transferMsg.fromPlayerID)
+                {
+                    Debug.LogWarning($"[SERVER] Player {transferMsg.fromPlayerID} tried to transfer key but doesn't have it. REJECTED.");
+                    return;
+                }
+
+                // Transfer the key
+                keyOwnerPlayerID = transferMsg.toPlayerID;
+                Debug.Log($"[SERVER] Key transfer from {transferMsg.fromPlayerID} to {transferMsg.toPlayerID} (AUTHORIZED), replicating");
+            }
+
+            replicationManager.ReplicateKeyTransfer(transferMsg.fromPlayerID, transferMsg.toPlayerID);
         }
     }
 
     private void ProcessServerPushMessage(byte[] buffer, int length)
     {
         PushMessage pushMsg = NetworkSerializer.Deserialize<PushMessage>(buffer, length);
-        if (pushMsg != null)
+        if (pushMsg != null && replicationManager != null)
         {
-            BroadcastMessage(pushMsg);
+            Debug.Log($"[SERVER] Player {pushMsg.pushedPlayerID} pushed, replicating");
+            replicationManager.ReplicatePush(
+                pushMsg.pushedPlayerID,
+                new Vector2(pushMsg.velocityX, pushMsg.velocityY),
+                pushMsg.duration
+            );
         }
     }
 
     private void ProcessLevelTransitionMessage(byte[] buffer, int length, ClientProxy client)
     {
+        if (client == null)
+        {
+            Debug.LogError("[SERVER] ProcessLevelTransitionMessage called with null client!");
+            return;
+        }
+
         LevelTransitionMessage transitionMsg = NetworkSerializer.Deserialize<LevelTransitionMessage>(buffer, length);
         if (transitionMsg != null)
         {
+            Debug.Log($"[SERVER] Received vote from client {client.username} (endpoint: {client.endpoint})");
+            
             lock (votesLock)
             {
+                // Verificar si este jugador ya votó
+                if (levelTransitionVotes.ContainsKey(transitionMsg.playerID))
+                {
+                    Debug.LogWarning($"[SERVER] Player {transitionMsg.playerID} already voted! Updating vote.");
+                }
+                
                 levelTransitionVotes[transitionMsg.playerID] = transitionMsg.wantsToContinue;
                 Debug.Log($"[SERVER] Player {transitionMsg.playerID} voted: {(transitionMsg.wantsToContinue ? "Continue" : "Return")}");
 
-                // Check if all connected players have voted
-                if (levelTransitionVotes.Count >= connectedClients.Count)
+                // Debug: mostrar todos los votos actuales
+                string votesDebug = "[SERVER] Current votes: ";
+                foreach (var kvp in levelTransitionVotes)
+                {
+                    votesDebug += $"Player{kvp.Key}={kvp.Value}, ";
+                }
+                Debug.Log(votesDebug);
+
+                int totalPlayers = 2;
+                Debug.Log($"[SERVER] Votes received: {levelTransitionVotes.Count}/{totalPlayers}");
+
+                if (levelTransitionVotes.Count >= totalPlayers)
                 {
                     bool allWantToContinue = true;
 
@@ -1148,20 +1335,27 @@ public class Networking : MonoBehaviour
 
                     string targetScene = allWantToContinue ? nextLevelName : "MainMenu";
                     
-                    Debug.Log($"[SERVER] All players voted. Loading scene: {targetScene}");
+                    Debug.Log($"[SERVER] ===== ALL PLAYERS VOTED =====");
+                    Debug.Log($"[SERVER] Decision: {(allWantToContinue ? "Continue" : "Return to menu")}");
+                    Debug.Log($"[SERVER] Loading scene: {targetScene}");
                     
                     LoadSceneMessage sceneMsg = new LoadSceneMessage(targetScene);
-                    BroadcastMessage(sceneMsg);
+                    byte[] sceneData = NetworkSerializer.Serialize(sceneMsg);
+                    if (sceneData != null)
+                    {
+                        BroadcastMessage(sceneData);
+                        Debug.Log("[SERVER] LoadScene message broadcasted to all clients");
+                    }
 
                     // Also process locally for the host
                     lock (sceneLoadLock)
                     {
                         pendingSceneToLoad = targetScene;
                         hasPendingSceneToLoad = true;
+                        Debug.Log($"[SERVER] Set pending scene load: {targetScene}");
                     }
 
                     levelTransitionVotes.Clear();
-                    nextLevelName = "";
                 }
             }
         }
@@ -1172,17 +1366,20 @@ public class Networking : MonoBehaviour
         SimpleMessage completeMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
         if (completeMsg != null)
         {
-            nextLevelName = completeMsg.content;
-            Debug.Log($"[SERVER] Level complete. Next level: {nextLevelName}");
-            
-            // Clear any previous votes
             lock (votesLock)
             {
+                nextLevelName = completeMsg.content;
                 levelTransitionVotes.Clear();
+                Debug.Log($"[SERVER] Level complete received. Next level set to: {nextLevelName}");
             }
             
-            // Broadcast to all clients
+            Debug.Log($"[SERVER] Broadcasting LEVEL_COMPLETE to all clients");
             BroadcastMessage(completeMsg);
+            
+            lock (levelCompleteLock)
+            {
+                shouldShowLevelTransitionUI = true;
+            }
         }
     }
 
@@ -1202,9 +1399,48 @@ public class Networking : MonoBehaviour
 
     public void SendBytes(byte[] data)
     {
+        if (data == null || data.Length == 0)
+        {
+            Debug.LogError("[NETWORK] SendBytes called with null or empty data!");
+            return;
+        }
+
+        string msgType = NetworkSerializer.GetMessageType(data, data.Length);
+        
         if (mode == NetworkMode.Client && serverEndPoint != null)
         {
+            Debug.Log($"[CLIENT] Sending {msgType} message to server ({serverEndPoint})");
             SendPacket(data, serverEndPoint);
+        }
+        else if (mode == NetworkMode.Server)
+        {
+            Debug.Log($"[SERVER] Broadcasting {msgType} message to {connectedClients.Count} clients");
+            BroadcastMessage(data);
+        }
+        else
+        {
+            Debug.LogWarning($"[NETWORK] SendBytes called but cannot send (mode: {mode}, serverEndPoint: {serverEndPoint})");
+        }
+    }
+
+    private void BroadcastMessage(byte[] data)
+    {
+        if (mode != NetworkMode.Server) return;
+        if (data == null) return;
+
+        lock (clientsLock)
+        {
+            foreach (ClientProxy client in connectedClients)
+            {
+                try
+                {
+                    SendPacket(data, client.endpoint);
+                }
+                catch (Exception e)
+                {
+                    ReportError($"Error broadcasting: {e.Message}");
+                }
+            }
         }
     }
 
@@ -1276,6 +1512,7 @@ public class Networking : MonoBehaviour
             if (data != null)
             {
                 SendPacket(data, serverEndPoint);
+                Debug.Log($"[CLIENT] Handshake sent to {serverIP}:{serverPort} with username: {username}");
             }
         }
         catch (Exception e)
@@ -1321,20 +1558,6 @@ public class Networking : MonoBehaviour
         Debug.LogError($"[NETWORK] {errorMessage}");
     }
 
-    private void SendPacket(byte[] data, int length, IPEndPoint toAddress)
-    {
-        if (socket == null || data == null) return;
-
-        try
-        {
-            socket.SendTo(data, length, SocketFlags.None, toAddress);
-        }
-        catch (Exception e)
-        {
-            ReportError($"Error sending packet: {e.Message}");
-        }
-    }
-
     private WaitingRoom GetWaitingRoomManager()
     {
         if (waitingRoom == null)
@@ -1350,6 +1573,8 @@ public class Networking : MonoBehaviour
         hasShutdown = true;
         isRunning = false;
 
+        Debug.Log($"[NETWORK] Shutting down {mode} networking...");
+
         try
         {
             if (socket != null)
@@ -1358,7 +1583,10 @@ public class Networking : MonoBehaviour
                 socket = null;
             }
         }
-        catch { }
+        catch (Exception e)
+        {
+            Debug.LogError($"[NETWORK] Error during shutdown: {e.Message}");
+        }
 
         Debug.Log("[NETWORK] Shutdown complete");
     }
