@@ -23,10 +23,13 @@ public class Networking : MonoBehaviour
 
     [Header("Ping Settings")]
     [SerializeField] private float pingInterval = 2f;
-    [SerializeField] private float disconnectionTimeout = 30f;
 
     [Header("Replication")]
     private ReplicationManager replicationManager;
+
+    [Header("Disconnection Detection")]
+    [SerializeField] private float inactivityDisconnectThreshold = 60f;  // For long inactivity
+    private bool hasTriggeredDisconnection = false;
 
     private Socket socket;
     private IPEndPoint serverEndPoint;
@@ -232,7 +235,7 @@ public class Networking : MonoBehaviour
                     } 
                     catch { }
                     socket = null;
-                    ReportError($"Failed to bind server socket: {e.Message}");
+                    Debug.LogError($"Failed to bind server socket: {e.Message}");
                     return;
                 }
             }
@@ -246,7 +249,7 @@ public class Networking : MonoBehaviour
                 catch (Exception e)
                 {
                     Debug.LogError($"[CLIENT] Failed to bind socket: {e.Message}");
-                    ReportError($"Failed to bind client socket: {e.Message}");
+                    Debug.LogError($"Failed to bind client socket: {e.Message}");
                     socket?.Close();
                     socket = null;
                     return;
@@ -278,7 +281,7 @@ public class Networking : MonoBehaviour
         catch (Exception e)
         {
             Debug.LogError($"[NETWORK] Socket creation failed: {e.Message}");
-            ReportError($"Socket creation failed: {e.Message}");
+            Debug.LogError($"Socket creation failed: {e.Message}");
             socket = null;
         }
     }
@@ -317,17 +320,15 @@ public class Networking : MonoBehaviour
             connectionTimer += Time.deltaTime;
             if (connectionTimer > connectionTimeout)
             {
-                Debug.LogError($"[CLIENT] Connection timeout!");
                 waitingForServerResponse = false;
             }
         }
 
         double timeSinceLastPing = (DateTime.Now - lastPingReceived).TotalSeconds;
-        if (timeSinceLastPing > disconnectionTimeout)
+        if (timeSinceLastPing > inactivityDisconnectThreshold && !hasTriggeredDisconnection)
         {
-            Debug.LogError("[CLIENT] Server connection lost!");
-            OnConnectionReset(serverEndPoint);
-            lastPingReceived = DateTime.Now;
+            hasTriggeredDisconnection = true;
+            ReturnToMainMenu();
         }
     }
 
@@ -335,12 +336,14 @@ public class Networking : MonoBehaviour
     {
         lock (clientsLock)
         {
+            DateTime now = DateTime.Now;
             List<ClientProxy> clientsToRemove = new List<ClientProxy>();
 
             foreach (ClientProxy client in connectedClients)
             {
-                double timeSinceLastPing = (DateTime.Now - client.lastPingTime).TotalSeconds;
-                if (timeSinceLastPing > disconnectionTimeout)
+                double timeSinceLastPing = (now - client.lastPingTime).TotalSeconds;
+                
+                if (timeSinceLastPing > inactivityDisconnectThreshold)
                 {
                     clientsToRemove.Add(client);
                 }
@@ -348,11 +351,57 @@ public class Networking : MonoBehaviour
 
             foreach (ClientProxy client in clientsToRemove)
             {
-                OnConnectionReset(client.endpoint);
-                connectedClients.Remove(client);
+                OnClientDisconnected(client);
+            }
+        }
+    }
 
-                SimpleMessage leftMsg = new SimpleMessage("PLAYER_LEFT", client.username);
-                BroadcastMessage(leftMsg);
+    private void OnClientDisconnected(ClientProxy client)
+    {
+        lock (clientsLock)
+        {
+            connectedClients.Remove(client);
+        }
+
+        SimpleMessage disconnectMsg = new SimpleMessage("PLAYER_LEFT", client.username);
+        byte[] disconnectData = NetworkSerializer.Serialize(disconnectMsg);
+        if (disconnectData != null)
+        {
+            BroadcastToClients(disconnectData, null);
+        }
+
+        lock (clientsLock)
+        {
+            if (connectedClients.Count <= 1)
+            {
+                lock (mainThreadActionsLock)
+                {
+                    mainThreadActions.Enqueue(() =>
+                    {
+                        ReturnToMainMenu();
+                    });
+                }
+            }
+        }
+    }
+
+    private void BroadcastToClients(byte[] data, IPEndPoint excludeEndpoint)
+    {
+        lock (clientsLock)
+        {
+            foreach (ClientProxy client in connectedClients)
+            {
+                if (excludeEndpoint == null || !client.endpoint.Equals(excludeEndpoint))
+                {
+                    try
+                    {
+                        socket.SendTo(data, client.endpoint);
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogError($"[SERVER] Error sending to {client.username}: {e.Message}");
+                    }
+                }
             }
         }
     }
@@ -727,6 +776,23 @@ public class Networking : MonoBehaviour
         }
     }
 
+    private void ReturnToMainMenu()
+    {
+        Time.timeScale = 1f;
+        
+        if (NetworkManager.Instance != null)
+        {
+            NetworkManager.Instance.ResetNetwork();
+        }
+        
+        if (GameManager.Instance != null)
+        {
+            Destroy(GameManager.Instance.gameObject);
+        }
+        
+        SceneManager.LoadScene("MainMenu");
+    }
+
     private void ProcessUsernameMessage(byte[] buffer, int length)
     {
         SimpleMessage usernameMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
@@ -771,6 +837,21 @@ public class Networking : MonoBehaviour
             {
                 pendingPlayerLeft = leftMsg.content;
                 hasPendingPlayerLeft = true;
+            }
+            
+            if (!hasTriggeredDisconnection)
+            {
+                lock (mainThreadActionsLock)
+                {
+                    mainThreadActions.Enqueue(() =>
+                    {
+                        if (SceneManager.GetActiveScene().name != "WaitingRoom" && !hasTriggeredDisconnection)
+                        {
+                            hasTriggeredDisconnection = true;
+                            ReturnToMainMenu();
+                        }
+                    });
+                }
             }
         }
     }
@@ -955,6 +1036,9 @@ public class Networking : MonoBehaviour
             case "LEVEL_COMPLETE":
                 ProcessServerLevelCompleteMessage(buffer, length);
                 break;
+            case "CLIENT_QUIT":
+                OnClientDisconnected(client);
+                break;
             default:
                 Debug.LogWarning("[SERVER] Unknown message type: " + msgType);
                 break;
@@ -1018,7 +1102,7 @@ public class Networking : MonoBehaviour
         }
         catch (Exception e)
         {
-            ReportError($"Error sending server name: {e.Message}");
+            Debug.LogError($"Error sending server name: {e.Message}");
         }
     }
 
@@ -1044,7 +1128,7 @@ public class Networking : MonoBehaviour
                 }
                 catch (Exception e)
                 {
-                    ReportError($"Error sending user list: {e.Message}");
+                    Debug.LogError($"Error sending user list: {e.Message}");
                 }
             }
         }
@@ -1150,10 +1234,7 @@ public class Networking : MonoBehaviour
 
                     keyCollected = true;
                     keyOwnerPlayerID = playerID;
-                    Debug.Log($"[REPLICATION] ✓ Server validates: Player {playerID} collected the key");
                 }
-
-                Debug.Log($"[REPLICATION] → Broadcasting key collection to all clients");
                 replicationManager.ReplicateKeyCollection(playerID);
             }
         }
@@ -1292,7 +1373,7 @@ public class Networking : MonoBehaviour
         }
         catch (Exception e)
         {
-            ReportError($"Error sending packet: {e.Message}");
+            Debug.LogError($"Error sending packet: {e.Message}");
         }
     }
 
@@ -1325,7 +1406,7 @@ public class Networking : MonoBehaviour
                 }
                 catch (Exception e)
                 {
-                    ReportError($"Error broadcasting: {e.Message}");
+                    Debug.LogError($"Error broadcasting: {e.Message}");
                 }
             }
         }
@@ -1376,7 +1457,7 @@ public class Networking : MonoBehaviour
                 }
                 catch (Exception e)
                 {
-                    ReportError($"Error broadcasting: {e.Message}");
+                    Debug.LogError($"Error broadcasting: {e.Message}");
                 }
             }
         }
@@ -1386,7 +1467,7 @@ public class Networking : MonoBehaviour
     {
         if (socket == null || serverEndPoint == null)
         {
-            ReportError("Cannot send handshake: socket or server endpoint not initialized");
+            Debug.LogError("Cannot send handshake: socket or server endpoint not initialized");
             return;
         }
 
@@ -1402,7 +1483,7 @@ public class Networking : MonoBehaviour
         }
         catch (Exception e)
         {
-            ReportError($"Error sending handshake: {e.Message}");
+            Debug.LogError($"Error sending handshake: {e.Message}");
         }
     }
 
@@ -1435,11 +1516,6 @@ public class Networking : MonoBehaviour
         Shutdown();
     }
 
-    void ReportError(string errorMessage)
-    {
-        Debug.LogError($"[NETWORK] {errorMessage}");
-    }
-
     private WaitingRoom GetWaitingRoomManager()
     {
         if (waitingRoom == null)
@@ -1447,6 +1523,54 @@ public class Networking : MonoBehaviour
             waitingRoom = FindAnyObjectByType<WaitingRoom>();
         }
         return waitingRoom;
+    }
+
+    void OnApplicationQuit() 
+    {
+        SendClientQuitNotification();
+        Thread.Sleep(100); 
+        Shutdown();
+    }
+
+    void OnDestroy() 
+    {
+        SendClientQuitNotification();
+        Thread.Sleep(50);
+        Shutdown();
+    }
+
+    void OnDisable()
+    {
+        SendClientQuitNotification();
+    }
+
+    private void SendClientQuitNotification()
+    {
+        if (hasShutdown) return; 
+        
+        if (mode == NetworkMode.Client && socket != null && serverEndPoint != null)
+        {
+            try
+            {
+                SimpleMessage quitMsg = new SimpleMessage("CLIENT_QUIT", username);
+                byte[] data = NetworkSerializer.Serialize(quitMsg);
+                if (data != null)
+                {
+                    SendPacket(data, serverEndPoint);
+                    try
+                    {
+                        socket.Blocking = true;
+                    }
+                    catch { }
+                    
+                    Debug.Log("[CLIENT] Sent quit notification to server");
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[CLIENT] Could not send quit notification: {e.Message}");
+            }
+        }
     }
 
     void Shutdown()
@@ -1468,7 +1592,4 @@ public class Networking : MonoBehaviour
             Debug.LogError($"[NETWORK] Error during shutdown: {e.Message}");
         }
     }
-
-    void OnApplicationQuit() => Shutdown();
-    void OnDestroy() => Shutdown();
 }
