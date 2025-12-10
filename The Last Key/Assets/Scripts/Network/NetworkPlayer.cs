@@ -32,7 +32,6 @@ public class NetworkPlayer : MonoBehaviour
     {
         rb = GetComponent<Rigidbody2D>();
         
-        // Find Client mode Networking component
         Networking[] allNetworkings = FindObjectsByType<Networking>(FindObjectsSortMode.None);
         foreach (Networking net in allNetworkings)
         {
@@ -79,28 +78,28 @@ public class NetworkPlayer : MonoBehaviour
 
         if (isLocalPlayer)
         {
-            // El jugador local envía su posición constantemente
-            sendTimer += Time.deltaTime;
-            if (sendTimer >= 1f / sendRate)
+            // ✅ NO enviar posición si estás siendo empujado
+            if (!isPushed)
             {
-                SendPositionUpdate();
-                sendTimer = 0f;
+                sendTimer += Time.deltaTime;
+                if (sendTimer >= 1f / sendRate)
+                {
+                    SendPositionUpdate();
+                    sendTimer = 0f;
+                }
             }
         }
         else
         {
-            // El jugador remoto interpola hacia la posición recibida
-            // SOLO si NO está empujado (durante empuje, la física local lo maneja)
+            // El jugador remoto interpola SOLO si NO está empujado
             if (!isPushed)
             {
-                // Interpolación suave de posición
                 transform.position = Vector3.Lerp(
                     transform.position,
                     targetPosition,
                     interpolationSpeed * Time.deltaTime
                 );
 
-                // Interpolación de velocidad
                 if (rb != null)
                 {
                     rb.linearVelocity = Vector2.Lerp(
@@ -121,6 +120,8 @@ public class NetworkPlayer : MonoBehaviour
             Vector2 currentVel = rb.linearVelocity;
             currentVel.y -= pushGravity * Time.fixedDeltaTime;
             rb.linearVelocity = currentVel;
+            
+            Debug.Log($"[NetworkPlayer] 🌊 Player {playerID} push physics: vel={rb.linearVelocity}");
         }
     }
 
@@ -192,6 +193,7 @@ public class NetworkPlayer : MonoBehaviour
         if (rb != null)
         {
             rb.linearVelocity = velocity;
+            Debug.Log($"[NetworkPlayer] 💥 Player {playerID} VELOCITY SET: {rb.linearVelocity} (isLocal: {isLocalPlayer})");
         }
         
         Debug.Log($"[NetworkPlayer] Player {playerID} START PUSH with velocity {velocity} for {duration}s (isLocal: {isLocalPlayer})");

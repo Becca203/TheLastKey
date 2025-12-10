@@ -334,6 +334,7 @@ GameObject:
   - component: {fileID: 4576461351140852255}
   - component: {fileID: 4151055369908807813}
   - component: {fileID: 4059949737213148669}
+  - component: {fileID: 7809919944372705638}
   - component: {fileID: 5308415083624705146}
   m_Layer: 0
   m_Name: Player
@@ -513,6 +514,25 @@ MonoBehaviour:
   useBounds: 0
   minBounds: {x: 0, y: 0}
   maxBounds: {x: 0, y: 0}
+--- !u!114 &7809919944372705638
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8347890613596116628}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 605c570fd9f6b594db3274f2aac01a08, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  isLocalPlayer: 0
+  playerID: 0
+  sendRate: 20
+  interpolationSpeed: 10
+  hasKey: 0
+  isPushed: 0
+  pushGravity: 80
 --- !u!114 &5308415083624705146
 MonoBehaviour:
   m_ObjectHideFlags: 0
