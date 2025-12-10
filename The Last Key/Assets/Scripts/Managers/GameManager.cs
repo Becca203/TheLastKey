@@ -16,6 +16,9 @@ public class GameManager : MonoBehaviour
     [Header("Network")]
     public int localPlayerID = 0; 
 
+    [Header("Traps")]
+    public GameObject trapPrefab;
+
     private GameObject localPlayerObject;
     private GameObject remotePlayerObject;
     private PlayerMovement2D localPlayerMovement;
@@ -166,5 +169,54 @@ public class GameManager : MonoBehaviour
             return remoteNetworkPlayer;
 
         return null;
+    }
+
+    public void SpawnTrap(int playerID, Vector3 position)
+    {
+        if (trapPrefab == null)
+        {
+            Debug.LogError("Trap prefab not assigned");
+            return;
+        }
+
+        GameObject trap = Instantiate(trapPrefab, position, Quaternion.identity);
+        TrapBehaviour trapBehaviour = trap.GetComponent<TrapBehaviour>();
+
+        if (trapBehaviour != null)
+            trapBehaviour.InitializeAsTrap(playerID);
+
+        Debug.Log($"[GameManager] Spawned trap for player {playerID} at {position}");
+    }
+
+    public void RespawnPlayer(NetworkPlayer player)
+    {
+        if (player == null) return;
+
+        Vector3 respawnPosition;
+
+        if (player.playerID == 1)
+            respawnPosition = player1SpawnPoint != null ? player1SpawnPoint.position : new Vector3(-2, 0, 0);
+        else
+            respawnPosition = player2SpawnPoint != null ? player2SpawnPoint.position : new Vector3(2, 0, 0);
+
+        player.transform.position = respawnPosition;
+
+        Rigidbody2D rb = player.GetComponent<Rigidbody2D>();
+        if (rb != null) rb.linearVelocity = Vector2.zero;
+
+        Debug.Log($"[GameManager] Respawned player {player.playerID} at {respawnPosition}");
+    }
+
+    public void DestroyTrapAt(Vector3 position, float tolerance = 0.15f)
+    {
+        var traps = FindObjectsOfType<TrapBehaviour>();
+        foreach (var trap in traps)
+        {
+            if (Vector3.Distance(trap.transform.position, position) <= tolerance)
+            {
+                Destroy(trap.gameObject);
+                return;
+            }
+        }
     }
 }

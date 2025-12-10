@@ -507,6 +507,7 @@ MonoBehaviour:
   player1SpawnPoint: {fileID: 0}
   player2SpawnPoint: {fileID: 0}
   localPlayerID: 0
+  trapPrefab: {fileID: 8236807058294328366, guid: 5676cc47c9ebeff44ba9eeab7ffe3e0a, type: 3}
 --- !u!4 &922038868
 Transform:
   m_ObjectHideFlags: 0

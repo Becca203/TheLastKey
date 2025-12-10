@@ -95,6 +95,14 @@ public class Networking : MonoBehaviour
     private bool hasPendingPush = false;
     private object pushLock = new object();
 
+    private TrapPlacementData pendingTrapPlacement;
+    private bool hasPendingTrapPlacement = false;
+    private object trapPlacementLock = new object();
+    private int pendingTrapTriggeredPlayerID = -1;
+    private bool hasPendingTrapTriggered = false;
+    private object trapTriggeredLock = new object();
+    private Vector3 pendingTrapPosition = Vector3.zero;
+
     private string pendingSceneToLoad = null;
     private bool hasPendingSceneToLoad = false;
     private object sceneLoadLock = new object();
@@ -124,6 +132,12 @@ public class Networking : MonoBehaviour
         public int playerID;
         public Vector2 velocity;
         public float duration;
+    }
+
+    private struct TrapPlacementData
+    {
+        public int playerID;
+        public Vector3 position;
     }
 
     private class ClientProxy
@@ -661,6 +675,36 @@ public class Networking : MonoBehaviour
                 pendingSceneToLoad = null;
             }
         }
+
+        if (hasPendingTrapPlacement)
+        {
+            lock (trapPlacementLock)
+            {
+                GameManager gameManager = GameManager.Instance;
+                if (gameManager != null)
+                {
+                    gameManager.SpawnTrap(pendingTrapPlacement.playerID, pendingTrapPlacement.position);
+                }
+                hasPendingTrapPlacement = false;
+            }
+        }
+
+        if (hasPendingTrapTriggered)
+        {
+            lock (trapTriggeredLock)
+            {
+                GameManager gameManager = GameManager.Instance;
+                if (gameManager != null)
+                {
+                    gameManager.DestroyTrapAt(pendingTrapPosition);
+                    NetworkPlayer player = gameManager.FindPlayerByID(pendingTrapTriggeredPlayerID);
+                    if (player != null) 
+                        gameManager.RespawnPlayer(player); 
+                }
+                hasPendingTrapTriggered = false;
+                pendingTrapTriggeredPlayerID = -1;
+            }
+        }
     }
 
     void ReceiveMessages()
@@ -775,6 +819,12 @@ public class Networking : MonoBehaviour
                 ProcessLevelCompleteMessage(buffer, length);
                 break;
             case "LEVEL_TRANSITION":
+                break;
+            case "TRAP_PLACED":
+                ProcessTrapPlacedMessage(buffer, length);
+                break;
+            case "TRAP_TRIGGERED":
+                ProcessTrapTriggeredMessage(buffer, length);
                 break;
             default:
                 Debug.LogWarning("[CLIENT] Unknown message type: " + msgType);
@@ -1007,6 +1057,43 @@ public class Networking : MonoBehaviour
         }
     }
 
+    private void ProcessTrapPlacedMessage(byte[] buffer, int length)
+    {
+        TrapPlacedMessage trapMsg = NetworkSerializer.Deserialize<TrapPlacedMessage>(buffer, length);
+        
+        if (trapMsg != null)
+        {
+            lock (trapPlacementLock)
+            {
+                pendingTrapPlacement = new TrapPlacementData
+                {
+                    playerID = trapMsg.playerID,
+                    position = trapMsg.GetPosition()
+                };
+                hasPendingTrapPlacement = true;
+                
+                Debug.Log($"[Networking] Client received TRAP_PLACED from Player {trapMsg.playerID}");
+            }
+        }
+    }
+
+    private void ProcessTrapTriggeredMessage(byte[] buffer, int length)
+    {
+        TrapTriggeredMessage triggerMsg = NetworkSerializer.Deserialize<TrapTriggeredMessage>(buffer, length);
+        
+        if (triggerMsg != null)
+        {
+            lock (trapTriggeredLock)
+            {
+                pendingTrapTriggeredPlayerID = triggerMsg.triggeredPlayerID;
+                pendingTrapPosition = triggerMsg.GetPosition();
+                hasPendingTrapTriggered = true;
+                
+                Debug.Log($"[Networking] Client received TRAP_TRIGGERED for Player {triggerMsg.triggeredPlayerID}");
+            }
+        }
+    }
+
     private void ProcessServerMessage(string msgType, byte[] buffer, int length, ClientProxy client)
     {
         if (client == null) return;
@@ -1046,6 +1133,12 @@ public class Networking : MonoBehaviour
                 break;
             case "CLIENT_QUIT":
                 OnClientDisconnected(client);
+                break;
+            case "TRAP_PLACED":
+                ProcessServerTrapPlacedMessage(buffer, length, client);
+                break;
+            case "TRAP_TRIGGERED":
+                ProcessServerTrapTriggeredMessage(buffer, length);
                 break;
             default:
                 Debug.LogWarning("[SERVER] Unknown message type: " + msgType);
@@ -1368,6 +1461,36 @@ public class Networking : MonoBehaviour
             {
                 shouldShowLevelTransitionUI = true;
             }
+        }
+    }
+
+    private void ProcessServerTrapPlacedMessage(byte[] buffer, int length, ClientProxy client)
+    {
+        if (client == null) return;
+
+        TrapPlacedMessage trapMsg = NetworkSerializer.Deserialize<TrapPlacedMessage>(buffer, length);
+        
+        if (trapMsg != null && replicationManager != null)
+        {
+            Debug.Log($"[SERVER] Player {trapMsg.playerID} placed trap at {trapMsg.GetPosition()}");
+            
+            byte[] data = NetworkSerializer.Serialize(trapMsg);
+            if (data != null) 
+                BroadcastToClients(data, null); 
+        }
+    }
+
+    private void ProcessServerTrapTriggeredMessage(byte[] buffer, int length)
+    {
+        TrapTriggeredMessage triggerMsg = NetworkSerializer.Deserialize<TrapTriggeredMessage>(buffer, length);
+        
+        if (triggerMsg != null && replicationManager != null)
+        {
+            Debug.Log($"[SERVER] Player {triggerMsg.triggeredPlayerID} triggered trap");
+            
+            byte[] data = NetworkSerializer.Serialize(triggerMsg);
+            if (data != null)
+                BroadcastToClients(data, null);
         }
     }
 

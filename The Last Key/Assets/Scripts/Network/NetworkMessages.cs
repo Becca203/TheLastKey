@@ -164,4 +164,42 @@ public class LevelCompleteMessage : NetworkMessage
     }
 }
 
+[Serializable]
+public class TrapPlacedMessage : NetworkMessage
+{
+    public int playerID;
+    public float posX;
+    public float posY;
+
+    public TrapPlacedMessage() : base("TRAP_PLACED") { }
+
+    public TrapPlacedMessage(int id, float x, float y) : base("TRAP_PLACED")
+    {
+        playerID = id;
+        posX = x;
+        posY = y;
+    }
+
+    public Vector3 GetPosition() => new Vector3(posX, posY, 0f);
+}
+
+[Serializable]
+public class TrapTriggeredMessage : NetworkMessage
+{
+    public int triggeredPlayerID;
+    public float posX;
+    public float posY;
+
+    public TrapTriggeredMessage() : base("TRAP_TRIGGERED") { }
+
+    public TrapTriggeredMessage(int playerID, Vector3 trapPos) : base("TRAP_TRIGGERED")
+    {
+        triggeredPlayerID = playerID;
+        posX = trapPos.x;
+        posY = trapPos.y;
+    }
+
+    public Vector3 GetPosition() => new Vector3(posX, posY, 0f);
+}
+
 
