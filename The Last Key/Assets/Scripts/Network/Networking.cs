@@ -556,24 +556,19 @@ public class Networking : MonoBehaviour
                 {
                     NetworkPlayer player = gameManager.FindPlayerByID(pendingPush.playerID);
                     
-                    // FIX: Apply push to LOCAL player (the one being pushed on this machine)
-                    if (player != null && player.isLocalPlayer)  // CHANGED: isLocalPlayer = true
+                    // ✅ SOLO aplicar si este jugador es LOCAL en ESTA pantalla
+                    if (player != null && player.isLocalPlayer)
                     {
-                        Rigidbody2D rb = player.GetComponent<Rigidbody2D>();
-                        if (rb != null && !rb.isKinematic)
-                        {
-                            Debug.Log($"[Networking] Applying PUSH to LOCAL Player {player.playerID}");
-                            rb.linearVelocity = pendingPush.velocity;
-                            player.StartPush(pendingPush.duration);
-                        }
-                        else
-                        {
-                            Debug.LogWarning($"[Networking] Cannot apply push: rb is null or kinematic");
-                        }
+                        Debug.Log($"[Networking] Applying PUSH to LOCAL Player {player.playerID}: vel={pendingPush.velocity}, dur={pendingPush.duration}");
+                        player.StartPush(pendingPush.velocity, pendingPush.duration);
                     }
-                    else if (player != null)
+                    else if (player != null && !player.isLocalPlayer)
                     {
-                        Debug.Log($"[Networking] Ignoring push for REMOTE Player {player.playerID} (pusher already applied it)");
+                        Debug.Log($"[Networking] Skipping PUSH for REMOTE Player {player.playerID} (already applied by pusher)");
+                    }
+                    else
+                    {
+                        Debug.LogError($"[Networking] Player {pendingPush.playerID} not found for PUSH");
                     }
                 }
                 hasPendingPush = false;
@@ -871,7 +866,7 @@ public class Networking : MonoBehaviour
         PushMessage pushMsg = NetworkSerializer.Deserialize<PushMessage>(buffer, length);
         if (pushMsg != null)
         {
-            Debug.Log($"[Networking] Received PUSH for pushedPlayerID = {pushMsg.pushedPlayerID}"); // AÑADE ESTE LOG
+            Debug.Log($"[Networking] Received PUSH for pushedPlayerID = {pushMsg.pushedPlayerID}"); 
             
             lock (pushLock)
             {

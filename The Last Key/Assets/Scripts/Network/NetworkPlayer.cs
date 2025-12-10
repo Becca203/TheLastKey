@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 public class NetworkPlayer : MonoBehaviour
 {
@@ -15,6 +15,8 @@ public class NetworkPlayer : MonoBehaviour
     [Header("Push System")]
     public bool isPushed = false;
     private float pushRecoveryTime = 0f;
+    private Vector2 pushVelocity = Vector2.zero;
+    private float pushEndTime = 0f;
 
     [SerializeField] private float pushGravity = 80f;
 
@@ -57,16 +59,12 @@ public class NetworkPlayer : MonoBehaviour
         targetPosition = transform.position;
         targetVelocity = Vector2.zero;
         
-        // VERIFICA ESTA L�NEA:
-        if (!isLocalPlayer && rb != null)
+        // ✅ SIEMPRE Dynamic - La física de Unity maneja todo
+        if (rb != null)
         {
-            rb.isKinematic = true;
-            Debug.Log($"[NetworkPlayer] Player {playerID} set to kinematic (remote)");
-        }
-        else if (isLocalPlayer && rb != null)
-        {
-            rb.isKinematic = false; // A�ADE ESTA L�NEA
-            Debug.Log($"[NetworkPlayer] Player {playerID} is dynamic (local)");
+            rb.isKinematic = false;
+            rb.gravityScale = 0f; // Gravedad manual (o usa la de Unity si prefieres)
+            Debug.Log($"[NetworkPlayer] Player {playerID} is DYNAMIC (isLocal: {isLocalPlayer})");
         }
     }
 
@@ -75,11 +73,13 @@ public class NetworkPlayer : MonoBehaviour
         if (isPushed && Time.time >= pushRecoveryTime)
         {
             isPushed = false;
-            Debug.Log("Player " + playerID + " recovered from push");
+            pushVelocity = Vector2.zero;
+            Debug.Log($"[NetworkPlayer] Player {playerID} recovered from push");
         }
 
         if (isLocalPlayer)
         {
+            // El jugador local envía su posición constantemente
             sendTimer += Time.deltaTime;
             if (sendTimer >= 1f / sendRate)
             {
@@ -89,23 +89,38 @@ public class NetworkPlayer : MonoBehaviour
         }
         else
         {
+            // El jugador remoto interpola hacia la posición recibida
+            // SOLO si NO está empujado (durante empuje, la física local lo maneja)
             if (!isPushed)
             {
+                // Interpolación suave de posición
                 transform.position = Vector3.Lerp(
                     transform.position,
                     targetPosition,
                     interpolationSpeed * Time.deltaTime
                 );
 
+                // Interpolación de velocidad
                 if (rb != null)
                 {
                     rb.linearVelocity = Vector2.Lerp(
                         rb.linearVelocity,
                         targetVelocity,
-                        interpolationSpeed * Time.fixedDeltaTime
+                        interpolationSpeed * Time.deltaTime
                     );
                 }
             }
+        }
+    }
+
+    void FixedUpdate()
+    {
+        // Aplicar gravedad aumentada durante el empuje
+        if (isPushed && rb != null && Time.time < pushEndTime)
+        {
+            Vector2 currentVel = rb.linearVelocity;
+            currentVel.y -= pushGravity * Time.fixedDeltaTime;
+            rb.linearVelocity = currentVel;
         }
     }
 
@@ -142,7 +157,7 @@ public class NetworkPlayer : MonoBehaviour
         if (playerMovement != null)
         {
             playerMovement.SetHasKey(value);
-            Debug.Log("Player " + playerID + " hasKey changed from " + previousValue + " to " + value);
+            Debug.Log($"[NetworkPlayer] Player {playerID} hasKey changed from {previousValue} to {value}");
         }
     }
 
@@ -158,46 +173,35 @@ public class NetworkPlayer : MonoBehaviour
     {
         if (!isLocalPlayer) return;
 
-        Debug.Log("Player " + playerID + " stealing key from Player " + targetPlayerID);
+        Debug.Log($"[NetworkPlayer] Player {playerID} stealing key from Player {targetPlayerID}");
         SendKeyTransferMessage(targetPlayerID, playerID);
     }
 
-    public void StartPush(float duration)
+    /// <summary>
+    /// Inicia el estado de empuje con velocidad específica
+    /// ✅ Funciona para ambos jugadores (local y remoto)
+    /// </summary>
+    public void StartPush(Vector2 velocity, float duration)
     {
         isPushed = true;
+        pushVelocity = velocity;
         pushRecoveryTime = Time.time + duration;
+        pushEndTime = Time.time + duration;
         
-        Debug.Log($"[NetworkPlayer] Player {playerID} is pushed for {duration} seconds (isLocal: {isLocalPlayer})");
+        // ✅ Aplicar velocidad directamente (el Rigidbody2D ya es Dynamic)
+        if (rb != null)
+        {
+            rb.linearVelocity = velocity;
+        }
         
-        // Start gravity coroutine if local player
-        if (isLocalPlayer && rb != null)
-        {
-            StartCoroutine(ApplyPushGravity(duration));
-        }
-    }
-
-    private System.Collections.IEnumerator ApplyPushGravity(float duration)
-    {
-        float elapsed = 0f;
-
-        while (elapsed < duration && rb != null && isPushed)
-        {
-            Vector2 currentVel = rb.linearVelocity;
-            currentVel.y -= pushGravity * Time.fixedDeltaTime;
-            rb.linearVelocity = currentVel;
-
-            elapsed += Time.fixedDeltaTime;
-            yield return new WaitForFixedUpdate();
-        }
-
-        Debug.Log($"[NetworkPlayer] Push gravity ended for Player {playerID}");
+        Debug.Log($"[NetworkPlayer] Player {playerID} START PUSH with velocity {velocity} for {duration}s (isLocal: {isLocalPlayer})");
     }
 
     private void SendKeyCollectedMessage()
     {
         if (networking == null)
         {
-            Debug.LogError("UDPClient not found!");
+            Debug.LogError("Networking not found!");
             return;
         }
 
@@ -207,7 +211,7 @@ public class NetworkPlayer : MonoBehaviour
         if (data != null)
         {
             networking.SendBytes(data);
-            Debug.Log("KEY_COLLECTED message sent for Player " + playerID);
+            Debug.Log($"[NetworkPlayer] KEY_COLLECTED message sent for Player {playerID}");
         }
     }
 
@@ -215,7 +219,7 @@ public class NetworkPlayer : MonoBehaviour
     {
         if (networking == null)
         {
-            Debug.LogError("UDPClient not found!");
+            Debug.LogError("Networking not found!");
             return;
         }
 
@@ -225,7 +229,7 @@ public class NetworkPlayer : MonoBehaviour
         if (data != null)
         {
             networking.SendBytes(data);
-            Debug.Log("KEY_TRANSFER sent: from Player " + fromPlayer + " to Player " + toPlayer);
+            Debug.Log($"[NetworkPlayer] KEY_TRANSFER sent: from Player {fromPlayer} to Player {toPlayer}");
         }
     }
 

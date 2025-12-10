@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 public class PlayerPushDetector : MonoBehaviour
 {   
@@ -124,23 +124,19 @@ public class PlayerPushDetector : MonoBehaviour
         if (targetRb != null)
         {
             Vector2 horizontalDirection = (targetPlayer.transform.position - transform.position).normalized;
-            
-            targetRb.linearVelocity = Vector2.zero;
-            
+
             Vector2 pushVelocity = new Vector2(
                 horizontalDirection.x * pushForceHorizontal,
                 pushForceVertical
             );
-            
-            targetRb.linearVelocity = pushVelocity;
-            
-            targetPlayer.StartPush(pushDuration);
-            StartCoroutine(ApplyPushGravity(targetRb, pushDuration));
-            
-            // VERIFICAR: targetPlayer.playerID debe ser el jugador EMPUJADO (Player 2)
+
+            // ✅ Aplicar localmente SOLO para feedback instantáneo del empujador
+            targetPlayer.StartPush(pushVelocity, pushDuration);
+
+            // ✅ Enviar al servidor para que lo replique
             SendPushMessage(targetPlayer.playerID, pushVelocity, pushDuration);
-            
-            Debug.Log($"[Push] Sending push for targetPlayer.playerID = {targetPlayer.playerID}"); // A�ADE ESTE LOG
+
+            Debug.Log($"[Push] Applied locally and sent push for Player {targetPlayer.playerID}");
         }
     }
 
@@ -175,15 +171,24 @@ public class PlayerPushDetector : MonoBehaviour
         Networking networking = FindAnyObjectByType<Networking>();
         if (networking != null)
         {
-            // VERIFICAR: targetPlayerID debe ser el jugador EMPUJADO, no el empujador
             PushMessage pushMsg = new PushMessage(targetPlayerID, velocity, duration);
             byte[] data = NetworkSerializer.Serialize(pushMsg);
             
             if (data != null)
             {
-                networking.SendBytes(data);
-                Debug.Log($"[Push] Sent PUSH message for Player {targetPlayerID}"); // A�ADE targetPlayerID al log
+                // Enviar 3 veces con pequeño delay para redundancia
+                StartCoroutine(SendRedundantPush(networking, data, targetPlayerID));
             }
+        }
+    }
+
+    private System.Collections.IEnumerator SendRedundantPush(Networking networking, byte[] data, int playerID)
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            networking.SendBytes(data);
+            Debug.Log($"[Push] Sent PUSH message #{i+1} for Player {playerID}");
+            yield return new WaitForSeconds(0.016f); // ~16ms entre envíos
         }
     }
 
