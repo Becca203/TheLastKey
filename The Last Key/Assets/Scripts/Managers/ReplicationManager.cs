@@ -182,7 +182,7 @@ public class ReplicationManager : MonoBehaviour
         if (player != null && !player.isLocalPlayer)
         {
             Vector3 position = new Vector3(posMsg.posX, posMsg.posY, 0);
-            Vector2 velocity = new Vector2(posMsg.velX, posMsg.velY);
+            Vector2 velocity = new Vector2 (posMsg.velX, posMsg.velY);
             player.UpdatePosition(position, velocity);
         }
     }
@@ -212,19 +212,20 @@ public class ReplicationManager : MonoBehaviour
         }
     }
 
-    /// CLIENT: Processes push event on remote player
+    /// CLIENT: Processes push event - APPLIES TO THE PUSHED PLAYER
     public void ProcessPush(int playerID, Vector2 velocity, float duration)
     {
         NetworkPlayer player = GetPlayerByID(playerID);
-        if (player != null && !player.isLocalPlayer)
+        if (player != null)
         {
-            Rigidbody2D rb = player.GetComponent<Rigidbody2D>();
-            if (rb != null)
-            {
-                rb.linearVelocity = velocity;
-                player.StartPush(duration);
-                Debug.Log($"[ReplicationManager] Player {playerID} pushed");
-            }
+            Debug.Log($"[ReplicationManager] Applying PUSH to Player {playerID}: vel={velocity}, dur={duration} (isLocal: {player.isLocalPlayer})");
+            
+            // Aplicar empuje CON velocidad
+            player.StartPush(velocity, duration);
+        }
+        else
+        {
+            Debug.LogError($"[ReplicationManager] Player {playerID} not found for push");
         }
     }
 

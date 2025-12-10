@@ -604,14 +604,20 @@ public class Networking : MonoBehaviour
                 if (gameManager != null)
                 {
                     NetworkPlayer player = gameManager.FindPlayerByID(pendingPush.playerID);
-                    if (player != null && !player.isLocalPlayer)
+                    
+                    // ✅ SOLO aplicar si este jugador es LOCAL en ESTA pantalla
+                    if (player != null && player.isLocalPlayer)
                     {
-                        Rigidbody2D rb = player.GetComponent<Rigidbody2D>();
-                        if (rb != null)
-                        {
-                            rb.linearVelocity = pendingPush.velocity;
-                            player.StartPush(pendingPush.duration);
-                        }
+                        Debug.Log($"[Networking] Applying PUSH to LOCAL Player {player.playerID}: vel={pendingPush.velocity}, dur={pendingPush.duration}");
+                        player.StartPush(pendingPush.velocity, pendingPush.duration);
+                    }
+                    else if (player != null && !player.isLocalPlayer)
+                    {
+                        Debug.Log($"[Networking] Skipping PUSH for REMOTE Player {player.playerID} (already applied by pusher)");
+                    }
+                    else
+                    {
+                        Debug.LogError($"[Networking] Player {pendingPush.playerID} not found for PUSH");
                     }
                 }
                 hasPendingPush = false;
@@ -941,6 +947,8 @@ public class Networking : MonoBehaviour
         PushMessage pushMsg = NetworkSerializer.Deserialize<PushMessage>(buffer, length);
         if (pushMsg != null)
         {
+            Debug.Log($"[Networking] Received PUSH for pushedPlayerID = {pushMsg.pushedPlayerID}"); 
+            
             lock (pushLock)
             {
                 pendingPush = new PushData

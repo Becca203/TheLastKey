@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody2D), typeof(Collider2D))]
@@ -33,6 +33,16 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
         _rb = GetComponent<Rigidbody2D>();
         _col = GetComponent<CapsuleCollider2D>();
         _networkPlayer = GetComponent<NetworkPlayer>();
+
+        // ✅ AÑADE ESTA VERIFICACIÓN
+        if (_networkPlayer == null)
+        {
+            Debug.LogError("[PlayerMovement2D] NetworkPlayer component NOT FOUND!");
+        }
+        else
+        {
+            Debug.Log($"[PlayerMovement2D] NetworkPlayer found: playerID={_networkPlayer.playerID}, isLocal={_networkPlayer.isLocalPlayer}");
+        }
 
         _rb.gravityScale = 0f;
         _rb.linearDamping = 0f;
@@ -75,6 +85,12 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
 
     private void FixedUpdate()
     {
+        // ✅ AÑADE ESTE LOG
+        if (_networkPlayer != null)
+        {
+            Debug.Log($"[PlayerMovement2D] Player {_networkPlayer.playerID} isPushed={_networkPlayer.isPushed}, isLocal={_networkPlayer.isLocalPlayer}");
+        }
+        
         if (_networkPlayer != null && _networkPlayer.isPushed)
         {
             HandleDirectionDuringPush();
