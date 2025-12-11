@@ -7,14 +7,10 @@ public class TrapBehaviour : MonoBehaviour
     [SerializeField] private string playerTag = "Player";
     [SerializeField] private float activationDelay = 0.2f;
     [SerializeField] private GameObject trapPrefab;
-    [SerializeField] private float trapCooldown = 60f;
-    [SerializeField] private KeyCode placeTrapKey = KeyCode.E;
+    [SerializeField] private float spawnYOffset = 0.3f;
 
-    [Header("Cooldown UI")]
-    [SerializeField] private Image cooldownFillImage;
-    [SerializeField] private Image iconImage;
-    [SerializeField] private Color availableColor = Color.white;
-    [SerializeField] private Color cooldownColor = Color.gray;
+    [Header("UI Abilities")]
+    [SerializeField] private Abilities abilitiesUI;
 
     private NetworkPlayer networkPlayer;
     private Collider2D playerCollider;
@@ -33,13 +29,13 @@ public class TrapBehaviour : MonoBehaviour
         {
             playerCollider = GetComponent<Collider2D>();
             isTrapInstance = false;
-            UpdateCooldownUI();
+
+            if (abilitiesUI == null)
+                abilitiesUI = GetComponentInChildren<Abilities>(true);
         }
         else
         {
             isTrapInstance = true;
-            if (cooldownFillImage != null) cooldownFillImage.gameObject.SetActive(false);
-            if (iconImage != null) iconImage.gameObject.SetActive(false);
         }
     }
 
@@ -56,11 +52,9 @@ public class TrapBehaviour : MonoBehaviour
                 isOnCooldown = false;
                 cooldownTimer = 0f;
             }
-            UpdateCooldownUI();
         }
-        else {UpdateCooldownUI();}
         
-        if (Input.GetKeyDown(placeTrapKey))
+        if (Input.GetKeyDown(abilitiesUI.ability1Key))
         {
             TryPlaceTrap();
         }
@@ -75,8 +69,7 @@ public class TrapBehaviour : MonoBehaviour
             return;
         }
 
-        float offset = playerCollider != null ? playerCollider.bounds.extents.x + 1.5f : 1f;
-        Vector3 trapPosition = transform.position - new Vector3(offset, 0, 0);
+        Vector3 trapPosition = transform.position + Vector3.down * spawnYOffset;
 
         Debug.Log("Placing trap at position: " + trapPosition);
 
@@ -87,22 +80,7 @@ public class TrapBehaviour : MonoBehaviour
     private void StartCooldown()
     {
         isOnCooldown = true;
-        cooldownTimer = trapCooldown;
-        UpdateCooldownUI();
-    }
-
-    private void UpdateCooldownUI()
-    {
-        if (cooldownFillImage != null)
-        {
-            float fill = isOnCooldown ? 1f - (cooldownTimer / trapCooldown) : 1f;
-            cooldownFillImage.fillAmount = fill;
-        }
-
-        if (iconImage != null)
-        {
-            iconImage.color = isOnCooldown ? cooldownColor : availableColor;
-        }
+        cooldownTimer = abilitiesUI.ability1Cooldown;
     }
 
     private void SendPlaceTrapMessage(Vector3 position)

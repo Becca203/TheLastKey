@@ -58,11 +58,10 @@ public class NetworkPlayer : MonoBehaviour
         targetPosition = transform.position;
         targetVelocity = Vector2.zero;
         
-        // ✅ SIEMPRE Dynamic - La física de Unity maneja todo
         if (rb != null)
         {
             rb.isKinematic = false;
-            rb.gravityScale = 0f; // Gravedad manual (o usa la de Unity si prefieres)
+            rb.gravityScale = 0f;
             Debug.Log($"[NetworkPlayer] Player {playerID} is DYNAMIC (isLocal: {isLocalPlayer})");
         }
     }
@@ -78,7 +77,6 @@ public class NetworkPlayer : MonoBehaviour
 
         if (isLocalPlayer)
         {
-            // ✅ NO enviar posición si estás siendo empujado
             if (!isPushed)
             {
                 sendTimer += Time.deltaTime;
@@ -91,7 +89,6 @@ public class NetworkPlayer : MonoBehaviour
         }
         else
         {
-            // El jugador remoto interpola SOLO si NO está empujado
             if (!isPushed)
             {
                 transform.position = Vector3.Lerp(
@@ -114,14 +111,12 @@ public class NetworkPlayer : MonoBehaviour
 
     void FixedUpdate()
     {
-        // Aplicar gravedad aumentada durante el empuje
         if (isPushed && rb != null && Time.time < pushEndTime)
         {
             Vector2 currentVel = rb.linearVelocity;
             currentVel.y -= pushGravity * Time.fixedDeltaTime;
             rb.linearVelocity = currentVel;
             
-            Debug.Log($"[NetworkPlayer] 🌊 Player {playerID} push physics: vel={rb.linearVelocity}");
         }
     }
 
@@ -178,10 +173,6 @@ public class NetworkPlayer : MonoBehaviour
         SendKeyTransferMessage(targetPlayerID, playerID);
     }
 
-    /// <summary>
-    /// Inicia el estado de empuje con velocidad específica
-    /// ✅ Funciona para ambos jugadores (local y remoto)
-    /// </summary>
     public void StartPush(Vector2 velocity, float duration)
     {
         isPushed = true;
@@ -189,11 +180,9 @@ public class NetworkPlayer : MonoBehaviour
         pushRecoveryTime = Time.time + duration;
         pushEndTime = Time.time + duration;
         
-        // ✅ Aplicar velocidad directamente (el Rigidbody2D ya es Dynamic)
         if (rb != null)
         {
             rb.linearVelocity = velocity;
-            Debug.Log($"[NetworkPlayer] 💥 Player {playerID} VELOCITY SET: {rb.linearVelocity} (isLocal: {isLocalPlayer})");
         }
         
         Debug.Log($"[NetworkPlayer] Player {playerID} START PUSH with velocity {velocity} for {duration}s (isLocal: {isLocalPlayer})");
