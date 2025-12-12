@@ -671,6 +671,7 @@ GameObject:
   - component: {fileID: 5308415083624705146}
   - component: {fileID: 661833447137638027}
   - component: {fileID: 8052525047358897337}
+  - component: {fileID: 2314817449148881496}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -767,6 +768,7 @@ MonoBehaviour:
   _stats: {fileID: 11400000, guid: 3c3929367eade074a955d377b615d997, type: 2}
   keyOverlay: {fileID: 2458461083127915655}
   hasKey: 0
+  animator: {fileID: 0}
 --- !u!70 &4576461351140852255
 CapsuleCollider2D:
   m_ObjectHideFlags: 0
@@ -921,3 +923,25 @@ MonoBehaviour:
   abilityText1: {fileID: 9188428025284342307}
   ability1Key: 101
   ability1Cooldown: 9
+--- !u!95 &2314817449148881496
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8347890613596116628}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 004c47103e195344184a2d0413eb6950, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0

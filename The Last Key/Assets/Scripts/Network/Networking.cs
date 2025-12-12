@@ -1140,6 +1140,9 @@ public class Networking : MonoBehaviour
             case "TRAP_TRIGGERED":
                 ProcessServerTrapTriggeredMessage(buffer, length);
                 break;
+            case "PLAYER_ATTACK":
+                ProcessPlayerAttackMessage(buffer, length);
+                break;
             default:
                 Debug.LogWarning("[SERVER] Unknown message type: " + msgType);
                 break;
@@ -1493,7 +1496,20 @@ public class Networking : MonoBehaviour
                 BroadcastToClients(data, null);
         }
     }
-
+    private void ProcessPlayerAttackMessage(byte[] buffer, int length)
+    {
+        SimpleMessage msg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
+        if (msg != null)
+        {
+            int playerID = int.Parse(msg.content);
+            GameManager gm = GameManager.Instance;
+            NetworkPlayer player = gm.FindPlayerByID(playerID);
+            if (player != null)
+            {
+                player.ApplyAnimationState("ATTACK");
+            }
+        }
+    }
     public void SendPacket(byte[] outputPacket, IPEndPoint toAddress)
     {
         if (socket == null || outputPacket == null) return;

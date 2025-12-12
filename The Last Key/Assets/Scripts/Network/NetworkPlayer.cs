@@ -271,4 +271,27 @@ public class NetworkPlayer : MonoBehaviour
             rb.linearVelocity = data.GetVelocity();
         }
     }
+
+    public void SendAttackAnimation()
+    {
+        if (!isLocalPlayer || networking == null) return;
+
+        SimpleMessage animMsg = new SimpleMessage("PLAYER_ATTACK", playerID.ToString());
+        byte[] data = NetworkSerializer.Serialize(animMsg);
+        networking.SendBytes(data);
+        Debug.Log($"[NetworkPlayer] Sent PLAYER_ATTACK for Player {playerID}");
+    }
+
+    public void ApplyAnimationState(string animType)
+    {
+        Animator animator = GetComponent<Animator>();
+        if (animator == null) return;
+
+        if (animType == "RUN")
+            animator.SetBool("isRunning", true);
+        else if (animType == "IDLE")
+            animator.SetBool("isRunning", false);
+        else if (animType == "ATTACK")
+            animator.SetTrigger("isAttacking");
+    }
 }

@@ -11,6 +11,8 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
     [SerializeField] private GameObject keyOverlay;
     [HideInInspector] public bool hasKey = false;
 
+    [Header("animations")]
+    [SerializeField] private Animator animator;
     private Rigidbody2D _rb;
     private CapsuleCollider2D _col;
     private FrameInput _frameInput;
@@ -34,6 +36,8 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
         _col = GetComponent<CapsuleCollider2D>();
         _networkPlayer = GetComponent<NetworkPlayer>();
 
+        if (animator == null)
+            animator = GetComponent<Animator>();
         // ✅ AÑADE ESTA VERIFICACIÓN
         if (_networkPlayer == null)
         {
@@ -59,6 +63,20 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
     {
         _time += Time.deltaTime;
         GatherInput();
+
+        if (_networkPlayer != null && _networkPlayer.isLocalPlayer)
+        {
+            // ✅ Animación de correr
+            bool running = Mathf.Abs(_frameInput.Move.x) > 0.1f;
+            animator.SetBool("isRunning", running);
+
+            // ✅ Animación de ataque
+            if (Input.GetMouseButtonDown(0))
+            {
+                animator.SetTrigger("isAttacking");
+                _networkPlayer.SendAttackAnimation(); // serializa el ataque
+            }
+        }
     }
 
     private void GatherInput()
