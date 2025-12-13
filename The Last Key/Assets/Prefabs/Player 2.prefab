@@ -706,8 +706,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a49aec01cfbcee446824e25b46d218c3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  playerCamera: {fileID: 7830310644552189677}
-  target: {fileID: 7048437652931505221}
+  playerCameraName: PlayerCamera
   followSpeed: 5
   offset: {x: 0, y: 2, z: -10}
   useBounds: 0
@@ -796,6 +795,7 @@ GameObject:
   - component: {fileID: 7830310644552189677}
   - component: {fileID: 8140333977962287036}
   - component: {fileID: 5663128371172192903}
+  - component: {fileID: 56751375566701633}
   m_Layer: 0
   m_Name: PlayerCamera
   m_TagString: Untagged
@@ -921,3 +921,21 @@ MonoBehaviour:
     m_MipBias: 0
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
+--- !u!114 &56751375566701633
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8811335804389986363}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a49aec01cfbcee446824e25b46d218c3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  playerCameraName: PlayerCamera
+  followSpeed: 5
+  offset: {x: 0, y: 2, z: -10}
+  useBounds: 0
+  minBounds: {x: 0, y: 0}
+  maxBounds: {x: 0, y: 0}

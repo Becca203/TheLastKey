@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -152,18 +152,19 @@ public class LoadSceneMessage : NetworkMessage
 }
 
 [Serializable]
-public class LevelCompleteMessage : NetworkMessage
+public class CameraSwitchMessage : NetworkMessage
 {
-    public string nextLevelName;
+    public bool switchToMainCamera;
 
-    public LevelCompleteMessage() : base("LEVEL_COMPLETE") { }
+    public CameraSwitchMessage() : base("CAMERA_SWITCH") { }
 
-    public LevelCompleteMessage(string nextLevel) : base("LEVEL_COMPLETE")
+    public CameraSwitchMessage(bool toMainCamera) : base("CAMERA_SWITCH")
     {
-        nextLevelName = nextLevel;
+        switchToMainCamera = toMainCamera;
     }
 }
 
+// ✅ Mensaje para colocar trampa
 [Serializable]
 public class TrapPlacedMessage : NetworkMessage
 {
@@ -173,16 +174,20 @@ public class TrapPlacedMessage : NetworkMessage
 
     public TrapPlacedMessage() : base("TRAP_PLACED") { }
 
-    public TrapPlacedMessage(int id, float x, float y) : base("TRAP_PLACED")
+    public TrapPlacedMessage(int id, Vector3 position) : base("TRAP_PLACED")
     {
         playerID = id;
-        posX = x;
-        posY = y;
+        posX = position.x;
+        posY = position.y;
     }
 
-    public Vector3 GetPosition() => new Vector3(posX, posY, 0f);
+    public Vector3 GetPosition()
+    {
+        return new Vector3(posX, posY, 0);
+    }
 }
 
+// ✅ Mensaje para activar trampa
 [Serializable]
 public class TrapTriggeredMessage : NetworkMessage
 {
@@ -192,14 +197,17 @@ public class TrapTriggeredMessage : NetworkMessage
 
     public TrapTriggeredMessage() : base("TRAP_TRIGGERED") { }
 
-    public TrapTriggeredMessage(int playerID, Vector3 trapPos) : base("TRAP_TRIGGERED")
+    public TrapTriggeredMessage(int playerID, Vector3 position) : base("TRAP_TRIGGERED")
     {
         triggeredPlayerID = playerID;
-        posX = trapPos.x;
-        posY = trapPos.y;
+        posX = position.x;
+        posY = position.y;
     }
 
-    public Vector3 GetPosition() => new Vector3(posX, posY, 0f);
+    public Vector3 GetPosition()
+    {
+        return new Vector3(posX, posY, 0);
+    }
 }
 
 

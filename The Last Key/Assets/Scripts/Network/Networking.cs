@@ -114,6 +114,9 @@ public class Networking : MonoBehaviour
 
     private bool hasStarted = false;
 
+    private bool shouldSwitchToMainCamera = false;
+    private object cameraSwitchLock = new object();
+
     private struct PositionUpdate
     {
         public int playerID;
@@ -325,6 +328,36 @@ public class Networking : MonoBehaviour
         }
 
         ProcessMessageQueues();
+
+        bool switchCamera = false;
+        lock (cameraSwitchLock)
+        {
+            if (shouldSwitchToMainCamera)
+            {
+                switchCamera = true;
+                shouldSwitchToMainCamera = false;
+            }
+        }
+
+        if (switchCamera)
+        {
+            CameraSequenceManager sequenceManager = FindAnyObjectByType<CameraSequenceManager>();
+            if (sequenceManager != null)
+            {
+                sequenceManager.SwitchToMainCamera();
+                Debug.Log("[Networking] Switched to Main Camera via network message");
+            }
+
+            NetworkPlayer[] allPlayers = FindObjectsByType<NetworkPlayer>(FindObjectsSortMode.None);
+            foreach (NetworkPlayer player in allPlayers)
+            {
+                PlayerCameraController cameraController = player.GetComponent<PlayerCameraController>();
+                if (cameraController != null)
+                {
+                    cameraController.ForceMainCamera();
+                }
+            }
+        }
     }
 
     private void HandleClientUpdate()
@@ -826,6 +859,9 @@ public class Networking : MonoBehaviour
             case "TRAP_TRIGGERED":
                 ProcessTrapTriggeredMessage(buffer, length);
                 break;
+            case "CAMERA_SWITCH":
+                ProcessCameraSwitchMessage(buffer, length);
+                break;
             default:
                 Debug.LogWarning("[CLIENT] Unknown message type: " + msgType);
                 break;
@@ -1094,6 +1130,19 @@ public class Networking : MonoBehaviour
         }
     }
 
+    private void ProcessCameraSwitchMessage(byte[] buffer, int length)
+    {
+        CameraSwitchMessage cameraMsg = NetworkSerializer.Deserialize<CameraSwitchMessage>(buffer, length);
+        if (cameraMsg != null)
+        {
+            lock (cameraSwitchLock)
+            {
+                shouldSwitchToMainCamera = cameraMsg.switchToMainCamera;
+            }
+            Debug.Log($"[Networking] Received CAMERA_SWITCH to main camera: {cameraMsg.switchToMainCamera}");
+        }
+    }
+
     private void ProcessServerMessage(string msgType, byte[] buffer, int length, ClientProxy client)
     {
         if (client == null) return;
@@ -1139,6 +1188,9 @@ public class Networking : MonoBehaviour
                 break;
             case "TRAP_TRIGGERED":
                 ProcessServerTrapTriggeredMessage(buffer, length);
+                break;
+            case "CAMERA_SWITCH":
+                ProcessServerCameraSwitchMessage(buffer, length);
                 break;
             default:
                 Debug.LogWarning("[SERVER] Unknown message type: " + msgType);
@@ -1460,6 +1512,20 @@ public class Networking : MonoBehaviour
             lock (levelCompleteLock)
             {
                 shouldShowLevelTransitionUI = true;
+            }
+        }
+    }
+
+    private void ProcessServerCameraSwitchMessage(byte[] buffer, int length)
+    {
+        CameraSwitchMessage cameraMsg = NetworkSerializer.Deserialize<CameraSwitchMessage>(buffer, length);
+
+        if (cameraMsg != null)
+        {
+            byte[] data = NetworkSerializer.Serialize(cameraMsg);
+            if (data != null)
+            {
+                BroadcastToClients(data, null); // null = enviar a todos
             }
         }
     }

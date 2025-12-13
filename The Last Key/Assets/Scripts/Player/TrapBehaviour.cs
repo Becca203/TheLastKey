@@ -101,8 +101,7 @@ public class TrapBehaviour : MonoBehaviour
         {
             TrapPlacedMessage msg = new TrapPlacedMessage(
                 networkPlayer.playerID,
-                position.x,
-                position.y
+                position
             );
             
             byte[] data = NetworkSerializer.Serialize(msg);

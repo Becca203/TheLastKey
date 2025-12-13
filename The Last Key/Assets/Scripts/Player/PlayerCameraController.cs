@@ -1,16 +1,9 @@
 using UnityEngine;
 
-/// Controla la c�mara individual de cada jugador con capacidad de alternar a vista general
 public class PlayerCameraController : MonoBehaviour
 {
-    [Header("Camera References")]
-    [SerializeField] private Camera playerCamera;
-    private Camera mainCamera;
-
-    [Header("Target")]
-    [SerializeField] private Transform target;
-
     [Header("Camera Settings")]
+    [SerializeField] private string playerCameraName = "PlayerCamera"; // Nombre de la cámara en el prefab
     [SerializeField] private float followSpeed = 5f;
     [SerializeField] private Vector3 offset = new Vector3(0, 2f, -10f);
 
@@ -19,44 +12,71 @@ public class PlayerCameraController : MonoBehaviour
     [SerializeField] private Vector2 minBounds;
     [SerializeField] private Vector2 maxBounds;
 
-    private bool usePlayerCamera = true;
+    private Camera playerCamera;
+    private Camera mainCamera;
+    private Transform target;
+    private bool usePlayerCamera = false;
+    private bool canUseCamera = false;
     private NetworkPlayer networkPlayer;
 
     void Start()
     {
-        FindMainCamera();
-
-        if (target != null)
-        {
-            networkPlayer = target.GetComponent<NetworkPlayer>();
-        }
-
+        target = transform; // El objetivo es el propio jugador
+        networkPlayer = GetComponent<NetworkPlayer>();
+        
+        // Buscar las cámaras en la escena
+        FindCameras();
+        
+        // Configurar las cámaras según si es jugador local o remoto
         SetupCameras();
     }
 
     void Update()
     {
-        // Solo permitir el cambio de c�mara si es el jugador local
-        if (networkPlayer != null && networkPlayer.isLocalPlayer)
+        // Solo permitir el cambio de cámara si es el jugador local Y puede usar la cámara
+        if (networkPlayer != null && networkPlayer.isLocalPlayer && canUseCamera)
         {
             HandleCameraSwitch();
         }
 
-        // Seguir al objetivo si est� usando la c�mara del jugador
-        if (usePlayerCamera && target != null)
+        // Seguir al objetivo si está usando la cámara del jugador
+        if (usePlayerCamera && canUseCamera && target != null)
         {
             FollowTarget();
         }
     }
 
-    private void FindMainCamera()
+    private void FindCameras()
     {
+        // Buscar la Player Camera dentro del jugador
+        Camera[] cameras = GetComponentsInChildren<Camera>(true);
+        foreach (Camera cam in cameras)
+        {
+            if (cam.gameObject.name.Contains(playerCameraName) || cam.gameObject.name == playerCameraName)
+            {
+                playerCamera = cam;
+                Debug.Log($"[PlayerCameraController] Player Camera found: {cam.gameObject.name}");
+                break;
+            }
+        }
+
+        // Si no se encuentra en el jugador, buscar por nombre
+        if (playerCamera == null)
+        {
+            GameObject playerCamObj = GameObject.Find(playerCameraName);
+            if (playerCamObj != null)
+            {
+                playerCamera = playerCamObj.GetComponent<Camera>();
+                Debug.Log($"[PlayerCameraController] Player Camera found by name: {playerCamObj.name}");
+            }
+        }
+
+        // Buscar la Main Camera en la escena
         GameObject mainCameraObj = GameObject.FindGameObjectWithTag("MainCamera");
-        
         if (mainCameraObj != null)
         {
             mainCamera = mainCameraObj.GetComponent<Camera>();
-            Debug.Log("[PlayerCameraController] Main Camera found and assigned");
+            Debug.Log("[PlayerCameraController] Main Camera found by tag");
         }
         else
         {
@@ -77,24 +97,20 @@ public class PlayerCameraController : MonoBehaviour
     {
         if (networkPlayer != null && networkPlayer.isLocalPlayer)
         {
-            // Jugador local: activar su c�mara personal, desactivar main camera
+            // Jugador local: DESACTIVAR su cámara personal al inicio
+            // La secuencia de cámara la activará después
             if (playerCamera != null)
             {
-                playerCamera.enabled = true;
-                // NO modificar el orthographicSize - mantener el valor del prefab
+                playerCamera.enabled = false;
             }
-
-            if (mainCamera != null)
-            {
-                mainCamera.enabled = false;
-            }
-
-            usePlayerCamera = true;
-            Debug.Log("[PlayerCameraController] Local player camera setup complete");
+            
+            usePlayerCamera = false;
+            canUseCamera = false; // No puede usar la cámara hasta que termine la secuencia
+            Debug.Log("[PlayerCameraController] Local player camera setup - waiting for sequence");
         }
         else
         {
-            // Jugador remoto: desactivar su c�mara (no la necesita)
+            // Jugador remoto: desactivar su cámara (no la necesita)
             if (playerCamera != null)
             {
                 playerCamera.enabled = false;
@@ -124,47 +140,78 @@ public class PlayerCameraController : MonoBehaviour
 
     private void FollowTarget()
     {
-        if (playerCamera == null) return;
+        if (playerCamera == null || !playerCamera.enabled) return;
 
         Vector3 desiredPosition = target.position + offset;
 
-        // Aplicar l�mites si est�n habilitados
         if (useBounds)
         {
             desiredPosition.x = Mathf.Clamp(desiredPosition.x, minBounds.x, maxBounds.x);
             desiredPosition.y = Mathf.Clamp(desiredPosition.y, minBounds.y, maxBounds.y);
         }
 
-        // Suavizar el movimiento
-        Vector3 smoothedPosition = Vector3.Lerp(
-            playerCamera.transform.position,
-            desiredPosition,
+        playerCamera.transform.position = Vector3.Lerp(
+            playerCamera.transform.position, 
+            desiredPosition, 
             followSpeed * Time.deltaTime
         );
+    }
 
-        playerCamera.transform.position = smoothedPosition;
+    // ===== MÉTODOS PÚBLICOS PARA CONTROL EXTERNO =====
+
+    /// <summary>
+    /// Activa o desactiva la Player Camera
+    /// </summary>
+    public void SetCameraActive(bool active)
+    {
+        if (playerCamera != null)
+        {
+            playerCamera.enabled = active;
+        }
+        canUseCamera = active;
     }
 
     /// <summary>
-    /// Configura el objetivo de la c�mara (llamado desde GameManager)
+    /// Establece si se debe usar la Player Camera o la Main Camera
     /// </summary>
-    public void SetTarget(Transform newTarget)
+    public void SetUsePlayerCamera(bool usePlayer)
     {
-        target = newTarget;
-        if (target != null)
+        usePlayerCamera = usePlayer;
+        
+        if (playerCamera != null && mainCamera != null)
         {
-            networkPlayer = target.GetComponent<NetworkPlayer>();
+            playerCamera.enabled = usePlayer;
+            mainCamera.enabled = !usePlayer;
         }
     }
 
     /// <summary>
-    /// Establece los l�mites de la c�mara (�til para diferentes niveles)
+    /// Obtiene la referencia a la Player Camera
     /// </summary>
-    public void SetBounds(Vector2 min, Vector2 max)
+    public Camera GetPlayerCamera()
     {
-        useBounds = true;
-        minBounds = min;
-        maxBounds = max;
+        return playerCamera;
+    }
+
+    /// <summary>
+    /// Fuerza el cambio a Main Camera (usado cuando se toca la puerta)
+    /// </summary>
+    public void ForceMainCamera()
+    {
+        usePlayerCamera = false;
+        canUseCamera = false;
+        
+        if (playerCamera != null)
+        {
+            playerCamera.enabled = false;
+        }
+        
+        if (mainCamera != null)
+        {
+            mainCamera.enabled = true;
+        }
+        
+        Debug.Log("[PlayerCameraController] Forced to Main Camera");
     }
 
     void OnDrawGizmosSelected()
@@ -172,7 +219,7 @@ public class PlayerCameraController : MonoBehaviour
         if (useBounds)
         {
             Gizmos.color = Color.yellow;
-            Vector3 center = new Vector3((minBounds.x + maxBounds.x) / 2f, (minBounds.y + maxBounds.y) / 2f, 0);
+            Vector3 center = new Vector3((minBounds.x + maxBounds.x) / 2, (minBounds.y + maxBounds.y) / 2, 0);
             Vector3 size = new Vector3(maxBounds.x - minBounds.x, maxBounds.y - minBounds.y, 0);
             Gizmos.DrawWireCube(center, size);
         }

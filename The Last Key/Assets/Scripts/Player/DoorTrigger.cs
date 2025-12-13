@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -37,8 +37,15 @@ public class DoorTrigger : MonoBehaviour
 
                 levelCompleted = true;
 
+                // ✅ Cambiar cámara localmente para TODOS los jugadores
+                SwitchAllPlayersToMainCamera();
+
+                // ✅ Enviar mensaje de cambio de cámara al otro jugador
                 if (networkPlayer.isLocalPlayer)
+                {
+                    SendCameraSwitchMessage();
                     SendLevelCompletedMessage(networkPlayer.playerID);
+                }
 
                 if (transitionUI != null)
                     transitionUI.ShowPanel();
@@ -50,21 +57,61 @@ public class DoorTrigger : MonoBehaviour
         }
     }
 
-    private void SendLevelCompletedMessage(int playerID)
+    /// <summary>
+    /// Cambia TODOS los jugadores (local y remoto) a la Main Camera localmente
+    /// </summary>
+    private void SwitchAllPlayersToMainCamera()
     {
-        // Find Client mode Networking component
-        Networking clientNetworking = null;
-        Networking[] allNetworkings = FindObjectsByType<Networking>(FindObjectsSortMode.None);
+        Debug.Log("[DoorTrigger] Switching all players to Main Camera");
+
+        // Buscar todos los jugadores y cambiar sus cámaras
+        NetworkPlayer[] allPlayers = FindObjectsByType<NetworkPlayer>(FindObjectsSortMode.None);
         
-        foreach (Networking net in allNetworkings)
+        foreach (NetworkPlayer player in allPlayers)
         {
-            if (net.mode == Networking.NetworkMode.Client)
+            PlayerCameraController cameraController = player.GetComponent<PlayerCameraController>();
+            if (cameraController != null)
             {
-                clientNetworking = net;
-                Debug.Log("[DoorTrigger] Found Client Networking component");
-                break;
+                cameraController.ForceMainCamera();
+                Debug.Log($"[DoorTrigger] Switched Player {player.playerID} to Main Camera");
             }
         }
+
+        // También notificar al CameraSequenceManager si existe
+        CameraSequenceManager sequenceManager = FindAnyObjectByType<CameraSequenceManager>();
+        if (sequenceManager != null)
+        {
+            sequenceManager.SwitchToMainCamera();
+        }
+    }
+
+    /// <summary>
+    /// Envía un mensaje de red para cambiar la cámara del otro jugador
+    /// </summary>
+    private void SendCameraSwitchMessage()
+    {
+        Networking clientNetworking = FindClientNetworking();
+        
+        if (clientNetworking != null)
+        {
+            CameraSwitchMessage cameraMsg = new CameraSwitchMessage(true);
+            byte[] data = NetworkSerializer.Serialize(cameraMsg);
+
+            if (data != null)
+            {
+                clientNetworking.SendBytes(data);
+                Debug.Log("[DoorTrigger] Sent CAMERA_SWITCH message to other player");
+            }
+        }
+        else
+        {
+            Debug.LogError("[DoorTrigger] Client Networking not found!");
+        }
+    }
+
+    private void SendLevelCompletedMessage(int playerID)
+    {
+        Networking clientNetworking = FindClientNetworking();
 
         if (clientNetworking != null)
         {
@@ -79,30 +126,42 @@ public class DoorTrigger : MonoBehaviour
         }
         else
         {
-            Debug.LogError("[DoorTrigger] Client Networking component not found!");
+            Debug.LogError("[DoorTrigger] Client Networking not found!");
         }
+    }
+
+    /// <summary>
+    /// Encuentra el componente Networking en modo Cliente
+    /// </summary>
+    private Networking FindClientNetworking()
+    {
+        Networking[] allNetworkings = FindObjectsByType<Networking>(FindObjectsSortMode.None);
+        
+        foreach (Networking net in allNetworkings)
+        {
+            if (net.mode == Networking.NetworkMode.Client)
+            {
+                return net;
+            }
+        }
+
+        return null;
     }
 
     private string GetNextLevelName()
     {
-        string currentScene = SceneManager.GetActiveScene().name;
+        int currentSceneIndex = SceneManager.GetActiveScene().buildIndex;
+        int nextSceneIndex = currentSceneIndex + 1;
 
-        if (currentScene == "GameScene")
+        if (nextSceneIndex < SceneManager.sceneCountInBuildSettings)
         {
-            return "Level2";
+            string path = SceneUtility.GetScenePathByBuildIndex(nextSceneIndex);
+            return System.IO.Path.GetFileNameWithoutExtension(path);
         }
-
-        if (currentScene.StartsWith("Level"))
+        else
         {
-            string numberPart = currentScene.Replace("Level", "");
-            if (int.TryParse(numberPart, out int levelNumber))
-            {
-                return $"Level{levelNumber + 1}";
-            }
+            Debug.LogWarning("[DoorTrigger] No next level found in build settings!");
+            return "MainMenu";
         }
-
-        // Fallback: try GameScene (Level1)
-        Debug.LogWarning($"[DoorTrigger] Could not determine next level from '{currentScene}', defaulting to Level1");
-        return "GameScene";
     }
 }
