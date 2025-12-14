@@ -50,7 +50,7 @@ Canvas:
   m_GameObject: {fileID: 667185823082404566}
   m_Enabled: 1
   serializedVersion: 3
-  m_RenderMode: 1
+  m_RenderMode: 0
   m_Camera: {fileID: 4481401724287061279}
   m_PlaneDistance: 100
   m_PixelPerfect: 0
@@ -79,7 +79,7 @@ MonoBehaviour:
   m_UiScaleMode: 1
   m_ReferencePixelsPerUnit: 100
   m_ScaleFactor: 1
-  m_ReferenceResolution: {x: 1920, y: 1080}
+  m_ReferenceResolution: {x: 800, y: 600}
   m_ScreenMatchMode: 0
   m_MatchWidthOrHeight: 0
   m_PhysicalUnit: 3
@@ -138,8 +138,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -150, y: 100}
-  m_SizeDelta: {x: 100, y: 100}
+  m_AnchoredPosition: {x: 347.9, y: -177.1}
+  m_SizeDelta: {x: 51.185, y: 51.185}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &1125236071768806999
 CanvasRenderer:
@@ -213,8 +213,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -65, y: 25}
-  m_SizeDelta: {x: 200, y: 200}
+  m_AnchoredPosition: {x: 391.40726, y: -215.48871}
+  m_SizeDelta: {x: 102.3699, y: 102.3699}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &3405562715835881306
 CanvasRenderer:
@@ -246,10 +246,10 @@ MonoBehaviour:
       m_Calls: []
   m_FontData:
     m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
-    m_FontSize: 50
+    m_FontSize: 20
     m_FontStyle: 0
     m_BestFit: 0
-    m_MinSize: 5
+    m_MinSize: 2
     m_MaxSize: 50
     m_Alignment: 0
     m_AlignByGeometry: 0
@@ -292,8 +292,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -150, y: 100}
-  m_SizeDelta: {x: 100, y: 100}
+  m_AnchoredPosition: {x: 347.90005, y: -177.1}
+  m_SizeDelta: {x: 51.185, y: 51.185}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &4872197976251506942
 CanvasRenderer:
@@ -922,6 +922,11 @@ MonoBehaviour:
   activationDelay: 0.2
   trapPrefab: {fileID: 8236807058294328366, guid: 5676cc47c9ebeff44ba9eeab7ffe3e0a, type: 3}
   spawnYOffset: 0.3
+  groundDetectionDistance: 2
+  raycastOffset: 0.1
+  groundLayer:
+    serializedVersion: 2
+    m_Bits: 8
   abilitiesUI: {fileID: 8052525047358897337}
 --- !u!114 &8052525047358897337
 MonoBehaviour:
