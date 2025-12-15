@@ -1,16 +1,16 @@
 fileFormatVersion: 2
-guid: 0622c97769bd5f74186c3ad29b40ac55
+guid: 14816d107e6b99443ac9023b6399bd4d
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 1407794295750269271
-    second: Tile1_low_Material_Height_0
+      213: 9071972063245797773
+    second: tiles_new_low_Material_Normal_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
     mipMapMode: 0
-    enableMipMap: 0
-    sRGBTexture: 1
+    enableMipMap: 1
+    sRGBTexture: 0
     linearTexture: 0
     fadeOut: 0
     borderMipMap: 0
@@ -55,9 +55,9 @@ TextureImporter:
   spriteBorder: {x: 0, y: 0, z: 0, w: 0}
   spriteGenerateFallbackPhysicsShape: 1
   alphaUsage: 1
-  alphaIsTransparency: 1
+  alphaIsTransparency: 0
   spriteTessellationDetail: -1
-  textureType: 8
+  textureType: 1
   textureShape: 1
   singleChannelComponent: 0
   flipbookRows: 1
@@ -100,7 +100,7 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Tile1_low_Material_Height_0
+      name: tiles_new_low_Material_Normal_0
       rect:
         serializedVersion: 2
         x: 0
@@ -115,8 +115,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 7591403047d798310800000000000000
-      internalID: 1407794295750269271
+      spriteID: d898802b68e16ed70800000000000000
+      internalID: 9071972063245797773
       vertices: []
       indices: 
       edges: []
@@ -135,7 +135,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Tile1_low_Material_Height_0: 1407794295750269271
+      tiles_new_low_Material_Normal_0: 9071972063245797773
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
