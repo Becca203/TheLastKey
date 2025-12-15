@@ -1,5 +1,5 @@
-using UnityEngine;
 using System.Collections;
+using UnityEngine;
 
 public class CameraSequenceManager : MonoBehaviour
 {
@@ -9,6 +9,7 @@ public class CameraSequenceManager : MonoBehaviour
 
     [Header("Transition Settings")]
     [SerializeField] private AnimationCurve transitionCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
+    [SerializeField] private float zoomAmount = 0.5f; // Cuánto se reduce el tamaño ortográfico (zoom in)
 
     private Camera mainCamera;
     private bool sequenceStarted = false;
@@ -85,44 +86,82 @@ public class CameraSequenceManager : MonoBehaviour
 
         Debug.Log("[CameraSequenceManager] Starting transition to Player Camera");
 
-        // Paso 2: Transición de 2 segundos
-        if (localPlayerCamera != null)
+        // Paso 2: Transición con zoom de 2 segundos
+        if (localPlayerCamera != null && mainCamera != null)
         {
             Camera playerCamera = localPlayerCamera.GetPlayerCamera();
 
-            if (playerCamera != null && mainCamera != null)
+            if (playerCamera != null)
             {
-                // Activar ambas cámaras para la transición
-                playerCamera.enabled = true;
-                mainCamera.enabled = true;
+                // Guardar posiciones y configuraciones iniciales
+                Vector3 mainCameraStartPos = mainCamera.transform.position;
+                Vector3 playerCameraTargetPos = localPlayer.transform.position;
+                
+                // Ajustar la posición objetivo de la cámara del jugador
+                if (playerCamera != null)
+                {
+                    playerCameraTargetPos = playerCamera.transform.position;
+                }
+
+                // Valores iniciales para el zoom
+                float mainCameraStartSize = mainCamera.orthographicSize;
+                float targetSize = mainCamera.orthographicSize * zoomAmount;
 
                 float elapsed = 0f;
-                float mainCameraInitialDepth = mainCamera.depth;
-                float playerCameraInitialDepth = playerCamera.depth;
 
-                // Asegurarse de que Player Camera empiece por debajo
-                playerCamera.depth = mainCameraInitialDepth - 1;
+                // Solo mantener Main Camera activa durante la transición
+                mainCamera.enabled = true;
+                if (playerCamera != null)
+                {
+                    playerCamera.enabled = false;
+                }
 
+                // Realizar la transición de zoom y movimiento
                 while (elapsed < transitionDuration)
                 {
                     elapsed += Time.deltaTime;
                     float t = elapsed / transitionDuration;
                     float curveValue = transitionCurve.Evaluate(t);
 
-                    // Cambiar gradualmente la profundidad para simular transición
-                    playerCamera.depth = Mathf.Lerp(mainCameraInitialDepth - 1, mainCameraInitialDepth + 1, curveValue);
+                    // Interpolar posición hacia el jugador
+                    mainCamera.transform.position = Vector3.Lerp(
+                        mainCameraStartPos,
+                        playerCameraTargetPos,
+                        curveValue
+                    );
+
+                    // Interpolar zoom (orthographic size)
+                    mainCamera.orthographicSize = Mathf.Lerp(
+                        mainCameraStartSize,
+                        targetSize,
+                        curveValue
+                    );
 
                     yield return null;
                 }
 
-                // Paso 3: Desactivar Main Camera y dejar solo Player Camera
+                // Asegurar valores finales
+                mainCamera.transform.position = playerCameraTargetPos;
+                mainCamera.orthographicSize = targetSize;
+
+                // Pequeña pausa antes del cambio final
+                yield return new WaitForSeconds(0.1f);
+
+                // Paso 3: Cambiar a la cámara del jugador
                 mainCamera.enabled = false;
-                playerCamera.depth = playerCameraInitialDepth;
-                playerCamera.enabled = true;
+                
+                if (playerCamera != null)
+                {
+                    playerCamera.enabled = true;
+                }
 
                 // Notificar al PlayerCameraController que ya puede usar su cámara
                 localPlayerCamera.SetCameraActive(true);
                 localPlayerCamera.SetUsePlayerCamera(true);
+
+                // Restaurar el tamaño original de la Main Camera para futuras transiciones
+                mainCamera.orthographicSize = mainCameraStartSize;
+                mainCamera.transform.position = mainCameraStartPos;
 
                 Debug.Log("[CameraSequenceManager] Transition complete - Player Camera active");
             }
