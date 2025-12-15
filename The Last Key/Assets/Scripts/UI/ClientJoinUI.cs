@@ -7,7 +7,8 @@ public class ClientJoinUI : MonoBehaviour
     [SerializeField] private TMP_InputField ipInputField;
     [SerializeField] private TMP_InputField usernameInputField;
     [SerializeField] private Button joinButton;
-    [SerializeField] private TMPro.TextMeshProUGUI statusText;
+    [SerializeField] private Button backButton; 
+    [SerializeField] private TextMeshProUGUI statusText;
 
     private bool isConnecting = false;
 
@@ -16,6 +17,11 @@ public class ClientJoinUI : MonoBehaviour
         if (joinButton != null)
         {
             joinButton.onClick.AddListener(OnJoinClicked);
+        }
+
+        if (backButton != null)
+        {
+            backButton.onClick.AddListener(OnBackButtonClicked);
         }
     }
 
@@ -82,8 +88,8 @@ public class ClientJoinUI : MonoBehaviour
         }
 
         // Get input values
-        string targetIP = ipInputField != null ? ipInputField.text : "127.0.0.1";
-        string username = usernameInputField != null ? usernameInputField.text : "Player";
+        string targetIP = ipInputField != null ? ipInputField.text.Trim() : "127.0.0.1";
+        string username = usernameInputField != null ? usernameInputField.text.Trim() : "Player";
 
         if (string.IsNullOrEmpty(targetIP))
         {
@@ -95,56 +101,22 @@ public class ClientJoinUI : MonoBehaviour
             username = "Player";
         }
 
-        // Check if we're retrying a failed connection
-        if (networkManager.GetNetworking() != null && networkManager.IsConnectionFailed())
+        Debug.Log($"[ClientJoinUI] Attempting to connect to {targetIP} with username {username}");
+
+        // CORREGIDO: El orden de parámetros es (username, targetIP)
+        networkManager.StartAsClient(username, targetIP);
+        isConnecting = true;
+    }
+
+    private void OnBackButtonClicked()
+    {
+        if (GameManager.Instance != null)
         {
-            Debug.Log("[ClientJoinUI] Retrying connection...");
-            isConnecting = true;
-            bool success = networkManager.RetryClientConnection();
-            
-            if (!success)
-            {
-                isConnecting = false;
-                if (statusText != null)
-                {
-                    statusText.text = "Retry failed immediately. Check configuration.";
-                }
-                if (joinButton != null)
-                {
-                    joinButton.interactable = true;
-                }
-            }
-        }
-        else if (networkManager.currentRole == NetworkManager.NetworkRole.None)
-        {
-            // First connection attempt
-            Debug.Log($"[ClientJoinUI] Starting client connection to {targetIP} as {username}");
-            isConnecting = true;
-            networkManager.StartAsClient(username, targetIP);
+            GameManager.Instance.ReturnToMainMenu();
         }
         else
         {
-            // Already connected or connecting
-            Debug.LogWarning($"[ClientJoinUI] Already in state: {networkManager.currentRole}");
-            isConnecting = false;
-            
-            if (statusText != null)
-            {
-                statusText.text = "Already connected or connecting...";
-            }
-            
-            if (joinButton != null)
-            {
-                joinButton.interactable = true;
-            }
-        }
-    }
-
-    void OnDestroy()
-    {
-        if (joinButton != null)
-        {
-            joinButton.onClick.RemoveListener(OnJoinClicked);
+            UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenu");
         }
     }
 }

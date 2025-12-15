@@ -153,6 +153,7 @@ MonoBehaviour:
   chatMessageInput: {fileID: 1562694794}
   sendButton: {fileID: 112215309}
   roomInfoText: {fileID: 1212749660}
+  ipAddressText: {fileID: 875770775}
   playButton: {fileID: 1969832966}
   minPlayersToStart: 2
 --- !u!4 &91015117

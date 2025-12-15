@@ -10,6 +10,7 @@ public class ServerPlayerUI : MonoBehaviour
     public TMP_InputField nameInputField;
     public TextMeshProUGUI ipAddressText;
     public Button playButton;
+    public Button backButton; 
     public TextMeshProUGUI statusText;
 
     private void Start()
@@ -18,6 +19,10 @@ public class ServerPlayerUI : MonoBehaviour
 
         if (playButton != null)
             playButton.onClick.AddListener(OnPlayButtonClicked);
+
+        
+        if (backButton != null)
+            backButton.onClick.AddListener(OnBackButtonClicked);
 
         UpdateStatus("Enter your name and click PLAY to start hosting");
     }
@@ -74,6 +79,17 @@ public class ServerPlayerUI : MonoBehaviour
         else
         {
             UpdateStatus("Error: NetworkManager not found!");
+        }
+    }
+    private void OnBackButtonClicked()
+    {
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.ReturnToMainMenu();
+        }
+        else
+        {
+            UnityEngine.SceneManagement.SceneManager.LoadScene("MainMenu");
         }
     }
 

@@ -219,4 +219,26 @@ public class GameManager : MonoBehaviour
             }
         }
     }
+
+    public void ReturnToMainMenu()
+    {
+        // Cleanup networking
+        if (networking != null)
+        {
+            Destroy(networking.gameObject);
+        }
+
+        // Cleanup local references
+        localPlayerObject = null;
+        remotePlayerObject = null;
+        localPlayerMovement = null;
+        localNetworkPlayer = null;
+        remoteNetworkPlayer = null;
+        localPlayerID = 0;
+
+        // Load main menu scene
+        SceneManager.LoadScene("MainMenu");
+        
+        Debug.Log("[GameManager] Returning to Main Menu");
+    }
 }

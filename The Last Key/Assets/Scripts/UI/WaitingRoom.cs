@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Net.Sockets;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -12,6 +14,7 @@ public class WaitingRoom : MonoBehaviour
     public TMP_InputField chatMessageInput;
     public Button sendButton;
     public TextMeshProUGUI roomInfoText;
+    public TextMeshProUGUI ipAddressText;  
 
     public Button playButton;
     public int minPlayersToStart = 2; 
@@ -23,6 +26,12 @@ public class WaitingRoom : MonoBehaviour
     private void Start()
     {
         AddChatMessage("System", "Welcome to the waiting room!");
+
+        
+        if (IsServer())
+        {
+            DisplayLocalIP();
+        }
 
         if (playButton != null)
         {
@@ -40,6 +49,41 @@ public class WaitingRoom : MonoBehaviour
         }
         
         UpdateInfo();
+    }
+
+    
+    private void DisplayLocalIP()
+    {
+        string localIP = GetLocalIPAddress();
+
+        if (ipAddressText != null)
+        {
+            ipAddressText.text = $"Server IP: {localIP}";
+        }
+    }
+
+    
+    private string GetLocalIPAddress()
+    {
+        try
+        {
+            string hostName = Dns.GetHostName();
+            IPHostEntry hostEntry = Dns.GetHostEntry(hostName);
+
+            foreach (IPAddress ip in hostEntry.AddressList)
+            {
+                if (ip.AddressFamily == AddressFamily.InterNetwork)
+                {
+                    return ip.ToString();
+                }
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[WaitingRoom] Error getting IP: {e.Message}");
+        }
+
+        return "127.0.0.1";
     }
 
     public void OnPlayButtonClicked()
@@ -219,10 +263,10 @@ public class WaitingRoom : MonoBehaviour
             }
         }
 
-        // Add new players from server list
+        // Find new players (in server list but not in local)
         foreach (string serverPlayer in serverPlayerList)
         {
-            if (!string.IsNullOrEmpty(serverPlayer.Trim()) && !connectedPlayers.Contains(serverPlayer))
+            if (!connectedPlayers.Contains(serverPlayer))
             {
                 connectedPlayers.Add(serverPlayer);
                 if (serverPlayer != myUsername)
@@ -233,6 +277,5 @@ public class WaitingRoom : MonoBehaviour
         }
 
         UpdateInfo();
-        Debug.Log($"[WaitingRoom] Synced player list: {connectedPlayers.Count} players");
     }
 }
