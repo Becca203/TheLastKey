@@ -1206,6 +1206,7 @@ MonoBehaviour:
   player1SpawnPoint: {fileID: 0}
   player2SpawnPoint: {fileID: 0}
   localPlayerID: 0
+  trapPrefab: {fileID: 0}
 --- !u!4 &922038868
 Transform:
   m_ObjectHideFlags: 0
@@ -1618,9 +1619,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8611b3fae56e6f3409bb9578d44c2197, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  nameInputField: {fileID: 170006497}
   ipInputField: {fileID: 389855641}
-  connectButton: {fileID: 1015331805}
+  usernameInputField: {fileID: 170006497}
+  joinButton: {fileID: 1015331805}
   statusText: {fileID: 619313071}
 --- !u!1 &1574489561
 GameObject:

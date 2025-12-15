@@ -4,96 +4,147 @@ using UnityEngine.UI;
 
 public class ClientJoinUI : MonoBehaviour
 {
-    [Header("UI Elements")]
-    public TMP_InputField nameInputField;
-    public TMP_InputField ipInputField;
-    public Button connectButton;
-    public TextMeshProUGUI statusText;
+    [SerializeField] private TMP_InputField ipInputField;
+    [SerializeField] private TMP_InputField usernameInputField;
+    [SerializeField] private Button joinButton;
+    [SerializeField] private TMPro.TextMeshProUGUI statusText;
 
     private bool isConnecting = false;
-    private float connectionTimer = 0f;
-    private float connectionTimeout = 10f;
 
-    private void Start()
+    void Start()
     {
-        if (connectButton != null)
-            connectButton.onClick.AddListener(OnConnectButtonClicked);
-
-        UpdateStatus("Enter server IP and your name to join");
+        if (joinButton != null)
+        {
+            joinButton.onClick.AddListener(OnJoinClicked);
+        }
     }
 
-    private void Update()
+    void Update()
     {
-        // Show connection progress
         if (isConnecting)
         {
-            connectionTimer += Time.deltaTime;
-            
-            if (connectionTimer > connectionTimeout)
+            NetworkManager networkManager = NetworkManager.Instance;
+            if (networkManager != null)
             {
-                UpdateStatus("Connection timeout! Please check the server IP and try again.");
-                isConnecting = false;
-                
-                if (connectButton != null)
-                    connectButton.interactable = true;
-            }
-            else
-            {
-                int dots = Mathf.FloorToInt(connectionTimer * 2) % 4;
-                string dotsString = new string('.', dots);
-                UpdateStatus($"Connecting{dotsString}");
+                // Check if connection failed
+                if (networkManager.IsConnectionFailed())
+                {
+                    isConnecting = false;
+                    
+                    if (statusText != null)
+                    {
+                        statusText.text = "Connection failed. Check server and retry.";
+                    }
+                    
+                    if (joinButton != null)
+                    {
+                        joinButton.interactable = true;
+                    }
+                }
+                // Check if connected successfully (networking exists and not failed)
+                else if (networkManager.GetNetworking() != null && 
+                         !networkManager.IsConnectionFailed())
+                {
+                    // Connection is active
+                    if (statusText != null && statusText.text == "Connecting...")
+                    {
+                        // Keep showing "Connecting..." until we get to WaitingRoom
+                        // The scene change will happen automatically from Networking.cs
+                    }
+                }
             }
         }
     }
 
-    private void OnConnectButtonClicked()
+    void OnJoinClicked()
     {
-        string playerName = nameInputField != null ? nameInputField.text.Trim() : "";
-        string serverIP = ipInputField != null ? ipInputField.text.Trim() : "";
-
-        // Validation
-        if (string.IsNullOrEmpty(playerName))
+        NetworkManager networkManager = NetworkManager.Instance;
+        
+        if (networkManager == null)
         {
-            UpdateStatus("Please enter a valid name!");
+            Debug.LogError("[ClientJoinUI] NetworkManager not found!");
+            if (statusText != null)
+            {
+                statusText.text = "Error: NetworkManager not found!";
+            }
             return;
         }
 
-        if (string.IsNullOrEmpty(serverIP))
+        // Disable button during connection
+        if (joinButton != null)
         {
-            UpdateStatus("Please enter a valid server IP!");
-            return;
+            joinButton.interactable = false;
         }
 
-        // Disable button while connecting
-        if (connectButton != null)
-            connectButton.interactable = false;
-
-        UpdateStatus($"Connecting to {serverIP}...");
-        isConnecting = true;
-        connectionTimer = 0f;
-
-        // Initialize NetworkManager as Client
-        if (NetworkManager.Instance != null)
+        if (statusText != null)
         {
-            NetworkManager.Instance.StartAsClient(playerName, serverIP);
-            Debug.Log($"[ClientJoinUI] Connecting to {serverIP} with username '{playerName}'");
+            statusText.text = "Connecting...";
+        }
+
+        // Get input values
+        string targetIP = ipInputField != null ? ipInputField.text : "127.0.0.1";
+        string username = usernameInputField != null ? usernameInputField.text : "Player";
+
+        if (string.IsNullOrEmpty(targetIP))
+        {
+            targetIP = "127.0.0.1";
+        }
+
+        if (string.IsNullOrEmpty(username))
+        {
+            username = "Player";
+        }
+
+        // Check if we're retrying a failed connection
+        if (networkManager.GetNetworking() != null && networkManager.IsConnectionFailed())
+        {
+            Debug.Log("[ClientJoinUI] Retrying connection...");
+            isConnecting = true;
+            bool success = networkManager.RetryClientConnection();
+            
+            if (!success)
+            {
+                isConnecting = false;
+                if (statusText != null)
+                {
+                    statusText.text = "Retry failed immediately. Check configuration.";
+                }
+                if (joinButton != null)
+                {
+                    joinButton.interactable = true;
+                }
+            }
+        }
+        else if (networkManager.currentRole == NetworkManager.NetworkRole.None)
+        {
+            // First connection attempt
+            Debug.Log($"[ClientJoinUI] Starting client connection to {targetIP} as {username}");
+            isConnecting = true;
+            networkManager.StartAsClient(username, targetIP);
         }
         else
         {
-            UpdateStatus("Error: NetworkManager not found!");
+            // Already connected or connecting
+            Debug.LogWarning($"[ClientJoinUI] Already in state: {networkManager.currentRole}");
             isConnecting = false;
             
-            if (connectButton != null)
-                connectButton.interactable = true;
+            if (statusText != null)
+            {
+                statusText.text = "Already connected or connecting...";
+            }
+            
+            if (joinButton != null)
+            {
+                joinButton.interactable = true;
+            }
         }
     }
 
-    private void UpdateStatus(string message)
+    void OnDestroy()
     {
-        if (statusText != null)
+        if (joinButton != null)
         {
-            statusText.text = message;
+            joinButton.onClick.RemoveListener(OnJoinClicked);
         }
-        Debug.Log($"[ClientJoinUI] {message}");
     }
 }

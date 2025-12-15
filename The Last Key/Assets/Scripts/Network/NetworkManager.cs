@@ -107,6 +107,31 @@ public class NetworkManager : MonoBehaviour
         Debug.Log($"[NetworkManager] Client created and connecting to {serverIP}");
     }
 
+    public Networking GetNetworking()
+    {
+        // Return client networking (used by both Host and Client roles)
+        return clientNetworking;
+    }
+
+    public bool IsConnectionFailed()
+    {
+        if (clientNetworking != null)
+        {
+            return clientNetworking.IsConnectionFailed();
+        }
+        return false;
+    }
+
+    public bool RetryClientConnection()
+    {
+        if (clientNetworking != null)
+        {
+            Debug.Log("[NetworkManager] Retrying client connection...");
+            return clientNetworking.RetryConnection();
+        }
+        return false;
+    }
+
     public void ResetNetwork()
     {
         Debug.Log("[NetworkManager] Resetting network...");

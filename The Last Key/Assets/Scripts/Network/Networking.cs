@@ -117,6 +117,8 @@ public class Networking : MonoBehaviour
     private bool shouldSwitchToMainCamera = false;
     private object cameraSwitchLock = new object();
 
+    private bool connectionFailed = false;
+
     private struct PositionUpdate
     {
         public int playerID;
@@ -170,6 +172,11 @@ public class Networking : MonoBehaviour
         mode = networkMode;
         serverIP = ip;
         username = user;
+
+        // Reset connection state
+        connectionFailed = false;
+        waitingForServerResponse = false;
+        connectionTimer = 0f;
     }
 
     void Start()
@@ -202,6 +209,7 @@ public class Networking : MonoBehaviour
         if (socket == null)
         {
             Debug.LogError("[NETWORK] Failed to create socket!");
+            connectionFailed = true;
             return;
         }
 
@@ -219,6 +227,120 @@ public class Networking : MonoBehaviour
         isInitialized = true;
         lastPingTime = Time.time;
         lastPingReceived = DateTime.Now;
+    }
+
+    private void HandleClientUpdate()
+    {
+        if (waitingForServerResponse)
+        {
+            connectionTimer += Time.deltaTime;
+            if (connectionTimer > connectionTimeout)
+            {
+                Debug.LogError("[CLIENT] Connection timeout - server not responding");
+                connectionFailed = true;
+                waitingForServerResponse = false;
+
+                // Clean up socket for retry
+                CleanupSocket();
+            }
+        }
+
+        double timeSinceLastPing = (DateTime.Now - lastPingReceived).TotalSeconds;
+        if (timeSinceLastPing > inactivityDisconnectThreshold && !hasTriggeredDisconnection)
+        {
+            hasTriggeredDisconnection = true;
+            ReturnToMainMenu();
+        }
+    }
+
+    private void CleanupSocket()
+    {
+        isRunning = false;
+
+        try
+        {
+            if (socket != null)
+            {
+                socket.Close();
+                socket.Dispose();
+                socket = null;
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"[NETWORK] Error cleaning up socket: {e.Message}");
+        }
+
+        isInitialized = false;
+        hasStarted = false;
+    }
+
+    /// <summary>
+    /// Retries the connection to the server. Call this after a failed connection attempt.
+    /// </summary>
+    public bool RetryConnection()
+    {
+        if (!connectionFailed && isInitialized)
+        {
+            Debug.LogWarning("[NETWORK] No need to retry - connection is fine");
+            return false;
+        }
+
+        Debug.Log("[NETWORK] Retrying connection...");
+
+        // Clean up previous attempt
+        CleanupSocket();
+
+        // Reset state
+        connectionFailed = false;
+        hasShutdown = false;
+        isRunning = true;
+        hasTriggeredDisconnection = false;
+
+        // Restart
+        Start();
+
+        return isInitialized && !connectionFailed;
+    }
+
+    public bool IsConnectionFailed()
+    {
+        return connectionFailed;
+    }
+
+    private void ProcessUsernameMessage(byte[] buffer, int length)
+    {
+        SimpleMessage usernameMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
+        if (usernameMsg != null && usernameMsg.content.StartsWith("SERVER_NAME:"))
+        {
+            waitingForServerResponse = false;
+            connectionFailed = false; // Connection successful
+            shouldLoadWaitingRoom = true;
+            Debug.Log("[CLIENT] Successfully connected to server");
+        }
+    }
+
+    void Shutdown()
+    {
+        if (hasShutdown) return;
+        hasShutdown = true;
+        isRunning = false;
+
+        try
+        {
+            if (socket != null)
+            {
+                socket.Close();
+                socket.Dispose();
+                socket = null;
+            }
+        }
+        catch (Exception e)
+        {
+            Debug.LogError($"[NETWORK] Error during shutdown: {e.Message}");
+        }
+
+        isInitialized = false;
     }
 
     private void CreateAndBindSocket()
@@ -360,24 +482,6 @@ public class Networking : MonoBehaviour
         }
     }
 
-    private void HandleClientUpdate()
-    {
-        if (waitingForServerResponse)
-        {
-            connectionTimer += Time.deltaTime;
-            if (connectionTimer > connectionTimeout)
-            {
-                waitingForServerResponse = false;
-            }
-        }
-
-        double timeSinceLastPing = (DateTime.Now - lastPingReceived).TotalSeconds;
-        if (timeSinceLastPing > inactivityDisconnectThreshold && !hasTriggeredDisconnection)
-        {
-            hasTriggeredDisconnection = true;
-            ReturnToMainMenu();
-        }
-    }
 
     private void HandleServerUpdate()
     {
@@ -883,16 +987,6 @@ public class Networking : MonoBehaviour
         }
         
         SceneManager.LoadScene("MainMenu");
-    }
-
-    private void ProcessUsernameMessage(byte[] buffer, int length)
-    {
-        SimpleMessage usernameMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
-        if (usernameMsg != null && usernameMsg.content.StartsWith("SERVER_NAME:"))
-        {
-            waitingForServerResponse = false;
-            shouldLoadWaitingRoom = true;
-        }
     }
 
     private void ProcessPlayerListMessage(byte[] buffer, int length)
@@ -1770,23 +1864,5 @@ public class Networking : MonoBehaviour
         }
     }
 
-    void Shutdown()
-    {
-        if (hasShutdown) return;
-        hasShutdown = true;
-        isRunning = false;
-
-        try
-        {
-            if (socket != null)
-            {
-                socket.Close();
-                socket = null;
-            }
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"[NETWORK] Error during shutdown: {e.Message}");
-        }
-    }
+    
 }
