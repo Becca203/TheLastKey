@@ -245,7 +245,7 @@ public class ReplicationManager : MonoBehaviour
         
         if (data != null && networking != null)
         {
-            networking.SendBytes(data);
+            networking.SendBytesReliable(data, "KEY_COLLECTED");
         }
 
         // Also hide key for all clients
@@ -269,7 +269,7 @@ public class ReplicationManager : MonoBehaviour
         
         if (data != null && networking != null)
         {
-            networking.SendBytes(data);
+            networking.SendBytesReliable(data, "KEY_TRANSFER");
         }
 
         Debug.Log($"[ReplicationManager] Replicated key transfer: {fromPlayerID} -> {toPlayerID}");
@@ -285,7 +285,7 @@ public class ReplicationManager : MonoBehaviour
         
         if (data != null && networking != null)
         {
-            networking.SendBytes(data);
+            networking.SendBytesReliable(data, "PUSH");
         }
 
         Debug.Log($"[ReplicationManager] Replicated push for Player {playerID}");
