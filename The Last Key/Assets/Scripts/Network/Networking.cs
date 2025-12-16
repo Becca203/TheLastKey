@@ -27,6 +27,10 @@ public class Networking : MonoBehaviour
     [Header("Replication")]
     private ReplicationManager replicationManager;
 
+    [Header("Reliability Settings")]
+    [SerializeField] private bool enableReliability = true;
+    private ReliabilityManager reliabilityManager;
+
     [Header("Disconnection Detection")]
     [SerializeField] private float inactivityDisconnectThreshold = 60f;  // For long inactivity
     private bool hasTriggeredDisconnection = false;
@@ -183,50 +187,58 @@ public class Networking : MonoBehaviour
     {
         if (hasStarted)
         {
-            Debug.LogWarning("[NETWORK] Start() already called, skipping");
+            Debug.LogWarning("[NETWORK] Start called multiple times - ignoring");
             return;
         }
-        hasStarted = true;
 
         if (mode == NetworkMode.None)
         {
-            Debug.LogWarning("[NETWORK] Mode not set. Call Initialize() first.");
+            Debug.LogError("[NETWORK] Mode not set! Use Initialize() before Start()");
             return;
         }
 
-        replicationManager = gameObject.AddComponent<ReplicationManager>();
         if (replicationManager != null)
         {
             replicationManager.Initialize(mode == NetworkMode.Server);
         }
         else
         {
-            Debug.LogError("[NETWORK] Failed to create ReplicationManager!");
+            Debug.LogWarning("[NETWORK] ReplicationManager not found");
         }
 
-        CreateAndBindSocket();
+        if (enableReliability)
+        {
+            reliabilityManager = new ReliabilityManager();
+            Debug.Log("[NETWORK] Reliability Manager initialized");
+        }
 
         if (socket == null)
         {
-            Debug.LogError("[NETWORK] Failed to create socket!");
-            connectionFailed = true;
-            return;
+            CreateAndBindSocket();
         }
 
         if (mode == NetworkMode.Client)
         {
-            SendHandshake();
-            connectionTimer = 0f;
-            waitingForServerResponse = true;
+            SimpleMessage usernameMsg = new SimpleMessage("USERNAME", username);
+            byte[] data = NetworkSerializer.Serialize(usernameMsg);
+            if (data != null)
+            {
+                SendBytes(data); 
+                waitingForServerResponse = true;
+                connectionTimer = 0f;
+                Debug.Log($"[CLIENT] Sent USERNAME: {username} to {serverIP}");
+            }
         }
         else if (mode == NetworkMode.Server)
         {
             Debug.Log($"[SERVER] Listening on port {serverPort}");
         }
 
-        isInitialized = true;
+        hasStarted = true;
         lastPingTime = Time.time;
         lastPingReceived = DateTime.Now;
+
+        isInitialized = true;
     }
 
     private void HandleClientUpdate()
@@ -275,9 +287,8 @@ public class Networking : MonoBehaviour
         hasStarted = false;
     }
 
-    /// <summary>
-    /// Retries the connection to the server. Call this after a failed connection attempt.
-    /// </summary>
+
+    // Retries the connection to the server. Call this after a failed connection attempt.
     public bool RetryConnection()
     {
         if (!connectionFailed && isInitialized)
@@ -440,6 +451,27 @@ public class Networking : MonoBehaviour
             lastPingTime = Time.time;
         }
 
+        // Process reliable packet retransmissions
+        if (enableReliability && reliabilityManager != null)
+        {
+            List<ReliablePacket> packetsToRetransmit = reliabilityManager.GetPacketsToRetransmit();
+            foreach (ReliablePacket packet in packetsToRetransmit)
+            {
+                byte[] data = NetworkSerializer.SerializeReliable(packet);
+                if (data != null)
+                {
+                    if (mode == NetworkMode.Client && serverEndPoint != null)
+                    {
+                        SendPacket(data, serverEndPoint);
+                    }
+                    else if (mode == NetworkMode.Server)
+                    {
+                        BroadcastToClients(data, null);
+                    }
+                }
+            }
+        }
+
         if (mode == NetworkMode.Client)
         {
             HandleClientUpdate();
@@ -564,7 +596,8 @@ public class Networking : MonoBehaviour
 
         if (mode == NetworkMode.Client && serverEndPoint != null)
         {
-            SendPacket(data, serverEndPoint);
+            SendBytes(data);
+            lastPingTime = Time.time;
         }
         else if (mode == NetworkMode.Server)
         {
@@ -572,9 +605,10 @@ public class Networking : MonoBehaviour
             {
                 foreach (ClientProxy client in connectedClients)
                 {
-                    SendPacket(data, client.endpoint);
+                    SendBytes(data, client.endpoint); 
                 }
             }
+            lastPingTime = Time.time;
         }
     }
 
@@ -755,16 +789,10 @@ public class Networking : MonoBehaviour
                 if (gameManager != null)
                 {
                     NetworkPlayer player = gameManager.FindPlayerByID(pendingPush.playerID);
-                    
-                    // ✅ SOLO aplicar si este jugador es LOCAL en ESTA pantalla
-                    if (player != null && player.isLocalPlayer)
+                    if (player != null)
                     {
                         Debug.Log($"[Networking] Applying PUSH to LOCAL Player {player.playerID}: vel={pendingPush.velocity}, dur={pendingPush.duration}");
                         player.StartPush(pendingPush.velocity, pendingPush.duration);
-                    }
-                    else if (player != null && !player.isLocalPlayer)
-                    {
-                        Debug.Log($"[Networking] Skipping PUSH for REMOTE Player {player.playerID} (already applied by pusher)");
                     }
                     else
                     {
@@ -896,78 +924,194 @@ public class Networking : MonoBehaviour
 
     void OnPacketReceived(byte[] buffer, int length, IPEndPoint fromAddress)
     {
-        string msgType = NetworkSerializer.GetMessageType(buffer, length);
+        string msgType = "UNKNOWN";
+        byte[] messageData = buffer;
+        int messageLength = length;
+
+        try
+        {
+            msgType = NetworkSerializer.GetMessageType(buffer, length);
+        }
+        catch
+        {
+            msgType = "UNKNOWN";
+        }
+
+        if (msgType == "UNKNOWN" || buffer.Length > 1000) 
+        {
+            try
+            {
+                ReliablePacket reliablePacket = NetworkSerializer.DeserializeReliable(buffer, length);
+                if (reliablePacket != null && reliablePacket.payload != null && reliablePacket.payload.Length > 0)
+                {
+                    msgType = reliablePacket.messageType;
+                    messageData = reliablePacket.payload;
+                    messageLength = reliablePacket.payload.Length;
+
+                    if (reliablePacket.needsAck)
+                    {
+                        SendAck(reliablePacket.sequenceNumber, fromAddress);
+                    }
+
+                    Debug.Log($"[RELIABLE] Received: {msgType} (seq: {reliablePacket.sequenceNumber})");
+                }
+            }
+            catch {}
+        }
 
         if (mode == NetworkMode.Server)
         {
             ClientProxy client = GetOrCreateClient(fromAddress);
-            ProcessServerMessage(msgType, buffer, length, client);
+            ProcessServerMessage(msgType, messageData, messageLength, client);
         }
         else if (mode == NetworkMode.Client)
         {
-            ProcessClientMessage(msgType, buffer, length);
+            ProcessClientMessage(msgType, messageData, messageLength);
+        }
+    }
+
+    // Process reliable packets and handle ACKs
+    private void HandleReliablePacket(ReliablePacket packet, IPEndPoint fromAddress)
+    {
+        // If ACK packet, process acknowledgment
+        if (packet.isAck)
+        {
+            reliabilityManager.AcknowledgePacket(packet.ackSequence);
+            Debug.Log($"[RELIABLE] Received ACK for sequence {packet.ackSequence}");
+            return;
+        }
+
+        // Update last received sequence and send ACK if needed
+        uint lastSeq = reliabilityManager.GetLastReceivedSequence();
+        if (packet.sequenceNumber > lastSeq)
+        {
+            reliabilityManager.UpdateLastReceivedSequence(packet.sequenceNumber);
+        }
+        else if (packet.sequenceNumber == lastSeq)
+        {
+            Debug.LogWarning($"[RELIABLE] Duplicate packet {packet.sequenceNumber}, ignoring");
+            SendAck(packet.sequenceNumber, fromAddress);
+            return;
+        }
+
+        if (packet.needsAck)
+            SendAck(packet.sequenceNumber, fromAddress);
+
+        if (packet.payload != null && packet.payload.Length > 0)
+        {
+            string msgType = packet.messageType;
+            if (mode == NetworkMode.Server)
+            {
+                ClientProxy client = GetOrCreateClient(fromAddress);
+                ProcessServerMessage(msgType, packet.payload, packet.payload.Length, client);
+            }
+            else if (mode == NetworkMode.Client)
+            {
+                ProcessClientMessage(msgType, packet.payload, packet.payload.Length);
+            }
+        }
+    }
+
+    private void SendAck(uint sequenceNumber, IPEndPoint toAddress)
+    {
+        ReliablePacket ackPacket = new ReliablePacket
+        {
+            sequenceNumber = reliabilityManager.GetNextSequence(),
+            ackSequence = sequenceNumber,
+            isAck = true,
+            needsAck = false,
+            messageType = "ACK",
+            payload = null
+        };
+
+        byte[] ackData = NetworkSerializer.SerializeReliable(ackPacket);
+        if (ackData != null)
+        {
+            SendPacket(ackData, toAddress);
+            Debug.Log($"[RELIABLE] Sent ACK for sequence {sequenceNumber}");
         }
     }
 
     private void ProcessClientMessage(string msgType, byte[] buffer, int length)
     {
+        if (msgType == "ACK") return;
+
         switch (msgType)
         {
             case "PING":
                 lastPingReceived = DateTime.Now;
                 break;
+
             case "USERNAME":
                 ProcessUsernameMessage(buffer, length);
                 break;
+
             case "PLAYER_LIST":
                 ProcessPlayerListMessage(buffer, length);
                 break;
+
             case "PLAYER_JOINED":
                 ProcessPlayerJoinedMessage(buffer, length);
                 break;
+
             case "PLAYER_LEFT":
                 ProcessPlayerLeftMessage(buffer, length);
                 break;
+
             case "CHAT":
                 ProcessChatMessage(buffer, length);
                 break;
+
             case "GAME_START":
                 ProcessGameStartMessage(buffer, length);
                 break;
+
             case "POSITION":
                 ProcessPositionMessage(buffer, length);
                 break;
+
             case "KEY_COLLECTED":
                 ProcessKeyCollectedMessage(buffer, length);
                 break;
+
             case "HIDE_KEY":
                 ProcessHideKey(buffer, length);
                 break;
+
             case "KEY_TRANSFER":
                 ProcessKeyTransferMessage(buffer, length);
                 break;
+
             case "PUSH":
                 ProcessPushMessage(buffer, length);
                 break;
+
             case "LOAD_SCENE":
                 ProcessLoadSceneMessage(buffer, length);
                 break;
+
             case "LEVEL_COMPLETE":
                 ProcessLevelCompleteMessage(buffer, length);
                 break;
+
             case "LEVEL_TRANSITION":
+                Debug.LogWarning("[CLIENT] Received LEVEL_TRANSITION");
                 break;
+
             case "TRAP_PLACED":
                 ProcessTrapPlacedMessage(buffer, length);
                 break;
+
             case "TRAP_TRIGGERED":
                 ProcessTrapTriggeredMessage(buffer, length);
                 break;
+
             case "CAMERA_SWITCH":
                 ProcessCameraSwitchMessage(buffer, length);
                 break;
+
             default:
-                Debug.LogWarning("[CLIENT] Unknown message type: " + msgType);
+                Debug.LogWarning($"[CLIENT] Unknown message type: {msgType}");
                 break;
         }
     }
@@ -1057,12 +1201,30 @@ public class Networking : MonoBehaviour
 
     private void ProcessGameStartMessage(byte[] buffer, int length)
     {
-        GameStartMessage gameStartMsg = NetworkSerializer.Deserialize<GameStartMessage>(buffer, length);
-        if (gameStartMsg != null)
+        GameStartMessage startMsg = NetworkSerializer.Deserialize<GameStartMessage>(buffer, length);
+        if (startMsg != null)
         {
-            assignedPlayerID = gameStartMsg.assignedPlayerID;
-            shouldSetPlayerID = true;
-            shouldLoadGameScene = true;
+            lock (mainThreadActionsLock)
+            {
+                shouldSetPlayerID = true;
+                assignedPlayerID = startMsg.assignedPlayerID; 
+                
+                mainThreadActions.Enqueue(() => {
+                    if (GameManager.Instance != null)
+                    {
+                        GameManager.Instance.SetLocalPlayerID(assignedPlayerID);
+                        Debug.Log($"[Networking] Game started! Your Player ID: {assignedPlayerID}");
+                    }
+                });
+            }
+
+            lock (sceneLoadLock)
+            {
+                shouldLoadGameScene = true;
+                pendingSceneToLoad = "GameScene";
+            }
+
+            Debug.Log($"[Networking] GAME_START received - assigned Player ID: {startMsg.assignedPlayerID}");
         }
     }
 
@@ -1240,12 +1402,11 @@ public class Networking : MonoBehaviour
     private void ProcessServerMessage(string msgType, byte[] buffer, int length, ClientProxy client)
     {
         if (client == null) return;
-        
-        client.lastPingTime = DateTime.Now;
-
+ 
         switch (msgType)
         {
             case "PING":
+                client.lastPingTime = DateTime.Now;
                 break;
             case "USERNAME":
                 ProcessServerUsernameMessage(buffer, length, client);
@@ -1341,15 +1502,12 @@ public class Networking : MonoBehaviour
 
     private void SendServerName(IPEndPoint clientEndpoint)
     {
-        try
+        SimpleMessage serverNameMsg = new SimpleMessage("USERNAME", "SERVER_NAME:" + serverName);
+        byte[] data = NetworkSerializer.Serialize(serverNameMsg);
+        if (data != null)
         {
-            SimpleMessage msg = new SimpleMessage("USERNAME", "SERVER_NAME:" + serverName);
-            byte[] data = NetworkSerializer.Serialize(msg);
-            SendPacket(data, clientEndpoint);
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"Error sending server name: {e.Message}");
+            SendBytes(data, clientEndpoint);
+            Debug.Log($"[SERVER] Sent server name to {clientEndpoint}");
         }
     }
 
@@ -1357,26 +1515,21 @@ public class Networking : MonoBehaviour
     {
         lock (clientsLock)
         {
-            PlayerListMessage playerListMsg = new PlayerListMessage();
+            PlayerListMessage listMsg = new PlayerListMessage();
+            listMsg.players.Clear();
+
             foreach (ClientProxy client in connectedClients)
             {
                 if (!string.IsNullOrEmpty(client.username))
                 {
-                    playerListMsg.players.Add(client.username);
+                    listMsg.players.Add(client.username);
                 }
             }
 
-            byte[] data = NetworkSerializer.Serialize(playerListMsg);
-            foreach (ClientProxy client in connectedClients)
+            byte[] data = NetworkSerializer.Serialize(listMsg);
+            if (data != null)
             {
-                try
-                {
-                    SendPacket(data, client.endpoint);
-                }
-                catch (Exception e)
-                {
-                    Debug.LogError($"Error sending user list: {e.Message}");
-                }
+                BroadcastToClients(data, null);
             }
         }
     }
@@ -1418,45 +1571,57 @@ public class Networking : MonoBehaviour
     {
         lock (clientsLock)
         {
-            HashSet<string> uniqueUsernames = new HashSet<string>();
-            foreach (ClientProxy c in connectedClients)
+            int connectedCount = connectedClients.Count;
+
+            if (connectedCount < 2)
             {
-                if (!string.IsNullOrEmpty(c.username))
-                    uniqueUsernames.Add(c.username);
+                Debug.LogWarning($"[SERVER] Cannot start game: only {connectedCount}/2 players connected");
+                return;
             }
-            int uniqueClients = uniqueUsernames.Count;
 
-            if (uniqueClients >= 2)
+            if (gameStarted)
             {
-                if (gameStarted)
-                {
-                    Debug.LogWarning("[SERVER] Game already started");
-                    return;
-                }
+                Debug.LogWarning("[SERVER] Game already started");
+                return;
+            }
 
-                gameStarted = true;
+            gameStarted = true;
 
-                lock (keyStateLock)
-                {
-                    keyCollected = false;
-                    keyOwnerPlayerID = -1;
-                }
+            // Reset key state
+            lock (keyStateLock)
+            {
+                keyCollected = false;
+                keyOwnerPlayerID = -1;
+            }
 
-                int playerID = 1;
-                foreach (ClientProxy client in connectedClients)
+            Debug.Log($"[SERVER] Starting game with {connectedCount} players");
+
+            // Send GAME_START to each client with their assigned player ID
+            int playerIDCounter = 1;
+            foreach (ClientProxy client in connectedClients)
+            {
+                client.playerID = playerIDCounter;
+                
+                GameStartMessage startMsg = new GameStartMessage(playerIDCounter, connectedCount);
+                byte[] startData = NetworkSerializer.Serialize(startMsg);
+                
+                if (startData != null)
                 {
-                    client.playerID = playerID;
-                    
-                    GameStartMessage startMsg = new GameStartMessage(playerID, uniqueClients);
-                    byte[] data = NetworkSerializer.Serialize(startMsg);
-                    
-                    if (data != null)
-                    {
-                        SendPacket(data, client.endpoint);
-                    }
-                    
-                    playerID++;
+                    SendPacket(startData, client.endpoint);
+                    Debug.Log($"[SERVER] Sent GAME_START to {client.username} (PlayerID: {playerIDCounter})");
                 }
+                
+                playerIDCounter++;
+            }
+
+            // Send LOAD_SCENE to all clients
+            LoadSceneMessage sceneMsg = new LoadSceneMessage("GameScene");
+            byte[] sceneData = NetworkSerializer.Serialize(sceneMsg);
+            
+            if (sceneData != null)
+            {
+                BroadcastToClients(sceneData, null);
+                Debug.Log("[SERVER] Broadcast LOAD_SCENE to all clients");
             }
         }
     }
@@ -1466,24 +1631,33 @@ public class Networking : MonoBehaviour
         if (client == null) return;
 
         SimpleMessage keyMsg = NetworkSerializer.Deserialize<SimpleMessage>(buffer, length);
-        if (keyMsg != null && replicationManager != null)
+        if (keyMsg != null && keyMsg.messageType == "KEY_COLLECTED" && int.TryParse(keyMsg.content, out int playerID))
         {
-            if (int.TryParse(keyMsg.content, out int playerID))
+            lock (keyStateLock)
             {
-                lock (keyStateLock)
+                if (keyCollected)
                 {
-                    if (keyCollected)
-                    {
-                        Debug.LogWarning($"[SERVER] REJECTED: Player {playerID} tried to collect key, but Player {keyOwnerPlayerID} has it");
-                        SendKeyRejection(client.endpoint, keyOwnerPlayerID);
-                        return;
-                    }
-
-                    keyCollected = true;
-                    keyOwnerPlayerID = playerID;
+                    SendKeyRejection(client.endpoint, keyOwnerPlayerID);
+                    return;
                 }
-                replicationManager.ReplicateKeyCollection(playerID);
+                keyCollected = true;
+                keyOwnerPlayerID = playerID;
             }
+
+            byte[] keyData = NetworkSerializer.Serialize(keyMsg);
+            if (keyData != null)
+            {
+                BroadcastToClients(keyData, null);
+            }
+
+            SimpleMessage hideMsg = new SimpleMessage("HIDE_KEY", "");
+            byte[] hideData = NetworkSerializer.Serialize(hideMsg);
+            if (hideData != null)
+            {
+                BroadcastToClients(hideData, null);
+            }
+
+            Debug.Log($"[SERVER] Key collected by player {playerID} (broadcast KEY_COLLECTED + HIDE_KEY)");
         }
     }
 
@@ -1507,20 +1681,48 @@ public class Networking : MonoBehaviour
     private void ProcessServerKeyTransferMessage(byte[] buffer, int length)
     {
         KeyTransferMessage transferMsg = NetworkSerializer.Deserialize<KeyTransferMessage>(buffer, length);
-        if (transferMsg != null && replicationManager != null)
+        if (transferMsg == null) return;
+
+        bool validTransfer = false;
+        int currentOwner;
+
+        lock (keyStateLock)
         {
-            lock (keyStateLock)
+            currentOwner = keyOwnerPlayerID;
+
+            if (!keyCollected)
             {
-                if (!keyCollected || keyOwnerPlayerID != transferMsg.fromPlayerID)
-                {
-                    Debug.LogWarning($"[SERVER] Key transfer rejected");
-                    return;
-                }
-
-                keyOwnerPlayerID = transferMsg.toPlayerID;
+                Debug.LogWarning("[SERVER] Ignoring KEY_TRANSFER: key not collected yet");
             }
+            else if (keyOwnerPlayerID != transferMsg.fromPlayerID)
+            {
+                Debug.LogWarning($"[SERVER] Ignoring KEY_TRANSFER: server owner={keyOwnerPlayerID}, msg.from={transferMsg.fromPlayerID}");
+            }
+            else
+            {
+                keyOwnerPlayerID = transferMsg.toPlayerID;
+                validTransfer = true;
+            }
+        }
 
-            replicationManager.ReplicateKeyTransfer(transferMsg.fromPlayerID, transferMsg.toPlayerID);
+        if (validTransfer)
+        {
+            byte[] data = NetworkSerializer.Serialize(transferMsg);
+            if (data != null)
+            {
+                BroadcastToClients(data, null);
+                Debug.Log($"[SERVER] KEY_TRANSFER broadcast: {transferMsg.fromPlayerID} -> {transferMsg.toPlayerID}");
+            }
+        }
+        else
+        {
+            SimpleMessage corr = new SimpleMessage("KEY_COLLECTED", currentOwner.ToString());
+            byte[] corrData = NetworkSerializer.Serialize(corr);
+            if (corrData != null)
+            {
+                BroadcastToClients(corrData, null);
+                Debug.Log($"[SERVER] Resync owner via KEY_COLLECTED: owner={currentOwner}");
+            }
         }
     }
 
@@ -1668,6 +1870,60 @@ public class Networking : MonoBehaviour
         }
     }
 
+    private bool MessageNeedsReliability(string messageType)
+    {
+        switch (messageType)
+        {
+            case "KEY_COLLECTED":
+            case "KEY_TRANSFER":
+            case "TRAP_PLACED":
+            case "TRAP_TRIGGERED":
+            case "START_GAME":
+            case "GAME_START":
+            case "LEVEL_COMPLETE":
+            case "LOAD_SCENE":
+                return true;
+            
+            default:
+                return false;
+        }
+    }
+
+    // Send secure packets with ACKs for critical messages
+    public void SendBytesReliable(byte[] data, string messageType = "")
+    {
+        if (!enableReliability || reliabilityManager == null)
+        {
+            SendBytes(data);
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(messageType) && !MessageNeedsReliability(messageType))
+        {
+            SendBytes(data);
+            return;
+        }
+
+        ReliablePacket packet = new ReliablePacket
+        {
+            sequenceNumber = reliabilityManager.GetNextSequence(),
+            ackSequence = reliabilityManager.GetLastReceivedSequence(),
+            isAck = false,
+            needsAck = true,
+            messageType = messageType,
+            payload = data,
+            timestamp = System.DateTime.Now.Ticks
+        };
+
+        byte[] packetData = NetworkSerializer.SerializeReliable(packet);
+        if (packetData != null)
+        {
+            SendBytes(packetData);
+            reliabilityManager.RegisterPendingPacket(packet);
+            Debug.Log($"[RELIABLE] Sent packet #{packet.sequenceNumber} ({messageType})");
+        }
+    }
+
     public void SendBytes(byte[] data)
     {
         if (data == null || data.Length == 0) return;
@@ -1680,6 +1936,14 @@ public class Networking : MonoBehaviour
         {
             BroadcastMessage(data);
         }
+    }
+
+    public void SendBytes(byte[] data, IPEndPoint toAddress)
+    {
+        if (data == null || data.Length == 0) return;
+        if (toAddress == null) return;
+
+        SendPacket(data, toAddress);
     }
 
     private void BroadcastMessage(byte[] data)

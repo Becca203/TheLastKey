@@ -25,6 +25,7 @@ public class GameManager : MonoBehaviour
     private NetworkPlayer localNetworkPlayer;
     private NetworkPlayer remoteNetworkPlayer;
 
+
     private Networking networking;
 
     void Awake()
@@ -107,6 +108,14 @@ public class GameManager : MonoBehaviour
 
     private void SetupLocalPlayer()
     {
+        if (localPlayerID != 1 && localPlayerID != 2)
+        {
+            Debug.LogError($"[GameManager] Invalid localPlayerID: {localPlayerID}");
+            return;
+        }
+
+        GameObject playerObject = (localPlayerID == 1) ? localPlayerObject : remotePlayerObject;
+
         // Local player has control of movement
         localPlayerMovement = localPlayerObject.GetComponent<PlayerMovement2D>();
         if (localPlayerMovement == null)
@@ -209,7 +218,7 @@ public class GameManager : MonoBehaviour
 
     public void DestroyTrapAt(Vector3 position, float tolerance = 0.15f)
     {
-        var traps = FindObjectsOfType<TrapBehaviour>();
+        var traps = FindObjectsByType<TrapBehaviour>(FindObjectsSortMode.None);
         foreach (var trap in traps)
         {
             if (Vector3.Distance(trap.transform.position, position) <= tolerance)

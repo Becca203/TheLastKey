@@ -108,7 +108,7 @@ public class TrapBehaviour : MonoBehaviour
             
             if (data != null)
             {
-                clientNetworking.SendBytes(data);
+                clientNetworking.SendBytesReliable(data, "TRAP_PLACED");
                 Debug.Log($"[TrapBehaviour] Sent TRAP_PLACED message");
             }
         }
@@ -165,7 +165,7 @@ public class TrapBehaviour : MonoBehaviour
             
             if (data != null)
             {
-                clientNetworking.SendBytes(data);
+                clientNetworking.SendBytesReliable(data, "TRAP_TRIGGERED");
                 Debug.Log($"[TrapBehaviour] Sent TRAP_TRIGGERED message for player {hitPlayerID}");
             }
         }

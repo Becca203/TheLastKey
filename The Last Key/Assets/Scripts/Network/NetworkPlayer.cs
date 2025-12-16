@@ -6,7 +6,7 @@ public class NetworkPlayer : MonoBehaviour
     public int playerID = 0;
 
     [Header("Network Settings")]
-    [SerializeField] private float sendRate = 20f;
+    [SerializeField] private float sendRate = 60f;
     [SerializeField] private float interpolationSpeed = 10f;
 
     [Header("Key Status")]
@@ -27,6 +27,18 @@ public class NetworkPlayer : MonoBehaviour
 
     private Vector3 targetPosition;
     private Vector2 targetVelocity;
+    
+    // Improved interpolation for lag compensation
+    private Vector3 lastReceivedPosition;
+    private Vector2 lastReceivedVelocity;
+    private float lastUpdateTime = 0f;
+    private float interpolationAlpha = 0f;
+    
+    // Client-side Prediction 
+    private Vector3 predictedPosition;
+    private bool enablePrediction = true;
+
+    public Vector3 positionBeforePush { get; private set; }
 
     void Start()
     {
@@ -60,7 +72,7 @@ public class NetworkPlayer : MonoBehaviour
         
         if (rb != null)
         {
-            rb.isKinematic = false;
+            rb.bodyType = RigidbodyType2D.Dynamic;
             rb.gravityScale = 0f;
             Debug.Log($"[NetworkPlayer] Player {playerID} is DYNAMIC (isLocal: {isLocalPlayer})");
         }
@@ -72,7 +84,18 @@ public class NetworkPlayer : MonoBehaviour
         {
             isPushed = false;
             pushVelocity = Vector2.zero;
-            Debug.Log($"[NetworkPlayer] Player {playerID} recovered from push");
+
+            if (isLocalPlayer)
+            {
+                lastReceivedPosition = transform.position;
+                targetPosition = transform.position;
+            }
+            lastReceivedVelocity = Vector2.zero;
+            targetVelocity = rb != null ? rb.linearVelocity : Vector2.zero;
+            lastUpdateTime = Time.time;
+            interpolationAlpha = 0f;
+
+            Debug.Log($"[NetworkPlayer] Player {playerID} recovered from push at position {transform.position}");
         }
 
         if (isLocalPlayer)
@@ -90,22 +113,31 @@ public class NetworkPlayer : MonoBehaviour
         else
         {
             if (!isPushed)
-            {
-                transform.position = Vector3.Lerp(
-                    transform.position,
-                    targetPosition,
-                    interpolationSpeed * Time.deltaTime
-                );
+                UpdateInterpolation();
+        }
+    }
 
-                if (rb != null)
-                {
-                    rb.linearVelocity = Vector2.Lerp(
-                        rb.linearVelocity,
-                        targetVelocity,
-                        interpolationSpeed * Time.deltaTime
-                    );
-                }
-            }
+    private void UpdateInterpolation()
+    {
+        float timeSinceUpdate = Time.time - lastUpdateTime;
+        float updateInterval = 1f / sendRate;
+        
+        interpolationAlpha = Mathf.Clamp01(timeSinceUpdate / updateInterval);
+        
+        if (enablePrediction && timeSinceUpdate > updateInterval)
+        {
+            predictedPosition = targetPosition + (Vector3)targetVelocity * timeSinceUpdate;
+        }
+        else
+        {
+            predictedPosition = targetPosition;
+        }
+
+        transform.position = Vector3.Lerp(lastReceivedPosition, predictedPosition, Mathf.SmoothStep(0f, 1f, interpolationAlpha));
+
+        if (rb != null)
+        {
+            rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, targetVelocity, interpolationSpeed * Time.deltaTime);
         }
     }
 
@@ -141,6 +173,15 @@ public class NetworkPlayer : MonoBehaviour
 
     public void UpdatePosition(Vector3 position, Vector2 velocity)
     {
+        if (isPushed) return;
+
+        if (!isLocalPlayer)
+        {
+            lastReceivedPosition = transform.position;
+            lastReceivedVelocity = targetVelocity;
+            lastUpdateTime = Time.time;
+        }
+        
         targetPosition = position;
         targetVelocity = velocity;
     }
@@ -179,6 +220,14 @@ public class NetworkPlayer : MonoBehaviour
         pushVelocity = velocity;
         pushRecoveryTime = Time.time + duration;
         pushEndTime = Time.time + duration;
+
+        positionBeforePush = transform.position;
+
+        lastReceivedPosition = transform.position;
+        targetPosition = transform.position;
+        lastReceivedVelocity = Vector2.zero;
+        targetVelocity = velocity;
+        interpolationAlpha = 0f;
         
         if (rb != null)
         {
@@ -201,7 +250,7 @@ public class NetworkPlayer : MonoBehaviour
 
         if (data != null)
         {
-            networking.SendBytes(data);
+            networking.SendBytesReliable(data, "KEY_COLLECTED");
             Debug.Log($"[NetworkPlayer] KEY_COLLECTED message sent for Player {playerID}");
         }
     }
@@ -219,7 +268,7 @@ public class NetworkPlayer : MonoBehaviour
 
         if (data != null)
         {
-            networking.SendBytes(data);
+            networking.SendBytesReliable(data, "KEY_TRANSFER");
             Debug.Log($"[NetworkPlayer] KEY_TRANSFER sent: from Player {fromPlayer} to Player {toPlayer}");
         }
     }

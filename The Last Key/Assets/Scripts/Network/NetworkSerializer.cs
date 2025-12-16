@@ -48,4 +48,33 @@ public static class NetworkSerializer
             return "UNKNOWN";
         }
     }
+
+    // Serialization methods for ReliablePacket
+    public static byte[] SerializeReliable(ReliablePacket packet)
+    {
+        try
+        {
+            string json = JsonUtility.ToJson(packet);
+            return Encoding.UTF8.GetBytes(json);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("Error serializing ReliablePacket: " + e.Message);
+            return null;
+        }
+    }
+
+    public static ReliablePacket DeserializeReliable(byte[] data, int length)
+    {
+        try
+        {
+            string json = Encoding.UTF8.GetString(data, 0, length);
+            return JsonUtility.FromJson<ReliablePacket>(json);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("Error deserializing ReliablePacket: " + e.Message);
+            return null;
+        }
+    }
 }

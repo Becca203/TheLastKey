@@ -57,9 +57,6 @@ public class DoorTrigger : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Cambia TODOS los jugadores (local y remoto) a la Main Camera localmente
-    /// </summary>
     private void SwitchAllPlayersToMainCamera()
     {
         Debug.Log("[DoorTrigger] Switching all players to Main Camera");
@@ -85,9 +82,6 @@ public class DoorTrigger : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Envía un mensaje de red para cambiar la cámara del otro jugador
-    /// </summary>
     private void SendCameraSwitchMessage()
     {
         Networking clientNetworking = FindClientNetworking();
@@ -120,7 +114,7 @@ public class DoorTrigger : MonoBehaviour
 
             if (data != null)
             {
-                clientNetworking.SendBytes(data);
+                clientNetworking.SendBytesReliable(data, "LEVEL_COMPLETE");
                 Debug.Log($"[DoorTrigger] Sent LEVEL_COMPLETE message for next level: {nextLevelName}");
             }
         }
@@ -130,9 +124,6 @@ public class DoorTrigger : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Encuentra el componente Networking en modo Cliente
-    /// </summary>
     private Networking FindClientNetworking()
     {
         Networking[] allNetworkings = FindObjectsByType<Networking>(FindObjectsSortMode.None);

@@ -181,6 +181,8 @@ public class ReplicationManager : MonoBehaviour
         NetworkPlayer player = GetPlayerByID(posMsg.playerID);
         if (player != null && !player.isLocalPlayer)
         {
+            if (player.isPushed) return;
+
             Vector3 position = new Vector3(posMsg.posX, posMsg.posY, 0);
             Vector2 velocity = new Vector2 (posMsg.velX, posMsg.velY);
             player.UpdatePosition(position, velocity);

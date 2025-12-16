@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using System.Collections;
 
 public class PlayerPushDetector : MonoBehaviour
 {   
@@ -17,8 +18,6 @@ public class PlayerPushDetector : MonoBehaviour
     
     // NEW: Track pushed player to send position updates
     private NetworkPlayer pushedPlayer = null;
-    private float pushUpdateTimer = 0f;
-    private float pushUpdateRate = 60f; // 60 updates per second
 
     void Start()
     {
@@ -36,21 +35,6 @@ public class PlayerPushDetector : MonoBehaviour
 
         DetectNearbyPlayer();
         HandlePushInput();
-        
-        // NEW: Send position updates for pushed player
-        if (pushedPlayer != null && pushedPlayer.isPushed)
-        {
-            pushUpdateTimer += Time.deltaTime;
-            if (pushUpdateTimer >= 1f / pushUpdateRate)
-            {
-                SendPushedPlayerPosition();
-                pushUpdateTimer = 0f;
-            }
-        }
-        else
-        {
-            pushedPlayer = null;
-        }
     }
 
     void DetectNearbyPlayer()
@@ -106,7 +90,6 @@ public class PlayerPushDetector : MonoBehaviour
             networkPlayer.StealKey(targetPlayer.playerID);
             
             pushedPlayer = targetPlayer;
-            pushUpdateTimer = 0f;
         }
         else if (!targetPlayer.hasKey)
         {
@@ -129,40 +112,10 @@ public class PlayerPushDetector : MonoBehaviour
                 horizontalDirection.x * pushForceHorizontal,
                 pushForceVertical
             );
-
-            // ✅ Aplicar localmente SOLO para feedback instantáneo del empujador
             targetPlayer.StartPush(pushVelocity, pushDuration);
 
-            // ✅ Enviar al servidor para que lo replique
             SendPushMessage(targetPlayer.playerID, pushVelocity, pushDuration);
-
             Debug.Log($"[Push] Applied locally and sent push for Player {targetPlayer.playerID}");
-        }
-    }
-
-    // NEW: Send position updates for the pushed player
-    private void SendPushedPlayerPosition()
-    {
-        if (pushedPlayer == null) return;
-
-        Networking networking = FindAnyObjectByType<Networking>();
-        Rigidbody2D rb = pushedPlayer.GetComponent<Rigidbody2D>();
-
-        if (networking != null && rb != null)
-        {
-            PositionMessage posMsg = new PositionMessage(
-                pushedPlayer.playerID,
-                pushedPlayer.transform.position.x,
-                pushedPlayer.transform.position.y,
-                rb.linearVelocity.x,
-                rb.linearVelocity.y
-            );
-
-            byte[] data = NetworkSerializer.Serialize(posMsg);
-            if (data != null)
-            {
-                networking.SendBytes(data);
-            }
         }
     }
 
@@ -176,23 +129,13 @@ public class PlayerPushDetector : MonoBehaviour
             
             if (data != null)
             {
-                // Enviar 3 veces con pequeño delay para redundancia
-                StartCoroutine(SendRedundantPush(networking, data, targetPlayerID));
+                networking.SendBytesReliable(data, "PUSH");
+                Debug.Log($"[Push] Sent PUSH message for Player {targetPlayerID} (RELIABLE)");
             }
         }
     }
 
-    private System.Collections.IEnumerator SendRedundantPush(Networking networking, byte[] data, int playerID)
-    {
-        for (int i = 0; i < 3; i++)
-        {
-            networking.SendBytes(data);
-            Debug.Log($"[Push] Sent PUSH message #{i+1} for Player {playerID}");
-            yield return new WaitForSeconds(0.016f); // ~16ms entre envíos
-        }
-    }
-
-    private System.Collections.IEnumerator ApplyPushGravity(Rigidbody2D rb, float duration)
+    private IEnumerator ApplyPushGravity(Rigidbody2D rb, float duration)
     {
         float elapsed = 0f;
         
