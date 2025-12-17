@@ -197,6 +197,7 @@ public class TrapTriggeredMessage : NetworkMessage
     public int triggeredPlayerID;
     public float posX;
     public float posY;
+    public long timestamp;
 
     public TrapTriggeredMessage() : base("TRAP_TRIGGERED") { }
 
@@ -205,6 +206,29 @@ public class TrapTriggeredMessage : NetworkMessage
         triggeredPlayerID = playerID;
         posX = position.x;
         posY = position.y;
+        timestamp = DateTime.Now.Ticks;
+    }
+
+    public Vector3 GetPosition()
+    {
+        return new Vector3(posX, posY, 0);
+    }
+}
+
+[Serializable]
+public class TrapDestroyMessage : NetworkMessage
+{
+    public float posX;
+    public float posY;
+    public long timestamp;
+
+    public TrapDestroyMessage() : base("TRAP_DESTROY") { }
+
+    public TrapDestroyMessage(Vector3 position) : base("TRAP_DESTROY")
+    {
+        posX = position.x;
+        posY = position.y;
+        timestamp = DateTime.Now.Ticks;
     }
 
     public Vector3 GetPosition()

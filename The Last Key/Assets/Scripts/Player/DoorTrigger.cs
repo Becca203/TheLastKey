@@ -37,10 +37,8 @@ public class DoorTrigger : MonoBehaviour
 
                 levelCompleted = true;
 
-                // ✅ Cambiar cámara localmente para TODOS los jugadores
                 SwitchAllPlayersToMainCamera();
 
-                // ✅ Enviar mensaje de cambio de cámara al otro jugador
                 if (networkPlayer.isLocalPlayer)
                 {
                     SendCameraSwitchMessage();

@@ -127,6 +127,9 @@ public class Networking : MonoBehaviour
     private Dictionary<int, long> lastPushTimestamps = new Dictionary<int, long>();
     private object pushTimestampLock = new object();
 
+    private Dictionary<int, long> lastTrapTriggeredTimestamps = new Dictionary<int, long>();
+    private object trapTriggeredTimestampLock = new object();   
+
     private struct PositionUpdate
     {
         public int playerID;
@@ -863,6 +866,11 @@ public class Networking : MonoBehaviour
                 if (gameManager != null)
                 {
                     gameManager.SpawnTrap(pendingTrapPlacement.playerID, pendingTrapPlacement.position);
+                    Debug.Log($"[Networking] Spawning trap for player {pendingTrapPlacement.playerID} at {pendingTrapPlacement.position}");
+                }
+                else
+                {
+                    Debug.LogError("[Networking] GameManager not found for trap spawning!");
                 }
                 hasPendingTrapPlacement = false;
             }
@@ -872,16 +880,19 @@ public class Networking : MonoBehaviour
         {
             lock (trapTriggeredLock)
             {
-                GameManager gameManager = GameManager.Instance;
+                GameManager gameManager = GameManager.Instance; 
                 if (gameManager != null)
                 {
-                    gameManager.DestroyTrapAt(pendingTrapPosition);
                     NetworkPlayer player = gameManager.FindPlayerByID(pendingTrapTriggeredPlayerID);
                     if (player != null) 
-                        gameManager.RespawnPlayer(player); 
+                    {
+                        gameManager.RespawnPlayer(player);
+                        gameManager.DestroyTrapAt(pendingTrapPosition);
+                        Debug.Log($"[Networking] Destroyed trap at {pendingTrapPosition}");
+                    }
                 }
+                
                 hasPendingTrapTriggered = false;
-                pendingTrapTriggeredPlayerID = -1;
             }
         }
     }
@@ -945,6 +956,7 @@ public class Networking : MonoBehaviour
         try
         {
             msgType = NetworkSerializer.GetMessageType(buffer, length);
+            Debug.Log($"[OnPacketReceived] Received {msgType} from {fromAddress} ({length} bytes)"); 
         }
         catch
         {
@@ -962,15 +974,32 @@ public class Networking : MonoBehaviour
                     messageData = reliablePacket.payload;
                     messageLength = reliablePacket.payload.Length;
 
-                    if (reliablePacket.needsAck)
+                    if (reliablePacket.needsAck && !reliablePacket.isAck)
                     {
                         SendAck(reliablePacket.sequenceNumber, fromAddress);
                     }
 
-                    Debug.Log($"[RELIABLE] Received: {msgType} (seq: {reliablePacket.sequenceNumber})");
+                    if (reliablePacket.isAck && (reliablePacket.payload == null || reliablePacket.payload.Length == 0))
+                    {
+                        if (enableReliability && reliabilityManager != null)
+                        {
+                            reliabilityManager.AcknowledgePacket(reliablePacket.ackSequence);
+                            Debug.Log($"[RELIABLE] ACK processed for seq {reliablePacket.ackSequence}");
+                        }
+                        return;
+                    }
+
+                    if (enableReliability && reliabilityManager != null)
+                    {
+                        reliabilityManager.UpdateLastReceivedSequence(reliablePacket.sequenceNumber);
+                    }
                 }
             }
-            catch {}
+            catch (Exception e)
+            {
+                Debug.LogError($"[RELIABLE] Error deserializing ReliablePacket: {e.Message}");
+                return;
+            }
         }
 
         if (mode == NetworkMode.Server)
@@ -1391,6 +1420,8 @@ public class Networking : MonoBehaviour
         
         if (trapMsg != null)
         {
+            Debug.Log($"[CLIENT] Received TRAP_PLACED from player {trapMsg.playerID} at {trapMsg.GetPosition()}");
+        
             lock (trapPlacementLock)
             {
                 pendingTrapPlacement = new TrapPlacementData
@@ -1401,20 +1432,39 @@ public class Networking : MonoBehaviour
                 hasPendingTrapPlacement = true;
             }
         }
+        else
+        {
+            Debug.LogError("[CLIENT] Failed to deserialize TRAP_PLACED");
+        }
     }
 
     private void ProcessTrapTriggeredMessage(byte[] buffer, int length)
     {
-        TrapTriggeredMessage triggerMsg = NetworkSerializer.Deserialize<TrapTriggeredMessage>(buffer, length);
-        
-        if (triggerMsg != null)
+        TrapTriggeredMessage triggeredMsg = NetworkSerializer.Deserialize<TrapTriggeredMessage>(buffer, length);
+        if (triggeredMsg == null) return;
+
+        lock (trapTriggeredTimestampLock)
         {
-            lock (trapTriggeredLock)
+            if (lastTrapTriggeredTimestamps.ContainsKey(triggeredMsg.triggeredPlayerID))
             {
-                pendingTrapTriggeredPlayerID = triggerMsg.triggeredPlayerID;
-                pendingTrapPosition = triggerMsg.GetPosition();
-                hasPendingTrapTriggered = true;
+                long lastTimestamp = lastTrapTriggeredTimestamps[triggeredMsg.triggeredPlayerID];
+                if (triggeredMsg.timestamp <= lastTimestamp)
+                {
+                    Debug.Log($"[CLIENT] TRAP_TRIGGERED duplicate for player {triggeredMsg.triggeredPlayerID}, ignoring");
+                    return;
+                }
             }
+            lastTrapTriggeredTimestamps[triggeredMsg.triggeredPlayerID] = triggeredMsg.timestamp;
+        }
+
+        Debug.Log($"[CLIENT] Received TRAP_TRIGGERED for player {triggeredMsg.triggeredPlayerID}");
+        lock (trapTriggeredLock)
+        {
+            if (hasPendingTrapTriggered) return;
+            
+            pendingTrapTriggeredPlayerID = triggeredMsg.triggeredPlayerID;
+            pendingTrapPosition = triggeredMsg.GetPosition();
+            hasPendingTrapTriggered = true;
         }
     }
 
@@ -1474,7 +1524,7 @@ public class Networking : MonoBehaviour
                 ProcessServerTrapPlacedMessage(buffer, length, client);
                 break;
             case "TRAP_TRIGGERED":
-                ProcessServerTrapTriggeredMessage(buffer, length);
+                ProcessServerTrapTriggeredMessage(buffer, length, client);
                 break;
             case "CAMERA_SWITCH":
                 ProcessServerCameraSwitchMessage(buffer, length);
@@ -1875,27 +1925,50 @@ public class Networking : MonoBehaviour
 
         TrapPlacedMessage trapMsg = NetworkSerializer.Deserialize<TrapPlacedMessage>(buffer, length);
         
-        if (trapMsg != null && replicationManager != null)
+        if (trapMsg != null)
         {
             Debug.Log($"[SERVER] Player {trapMsg.playerID} placed trap at {trapMsg.GetPosition()}");
-            
+
             byte[] data = NetworkSerializer.Serialize(trapMsg);
             if (data != null) 
+            {
                 BroadcastToClients(data, null); 
+                Debug.Log($"[SERVER] Broadcasted TRAP_PLACED to all clients");
+            }
+            else
+            {
+                Debug.LogError("[SERVER] Failed to serialize TRAP_PLACED for broadcast");
+            }
+        }
+        else
+        {
+            Debug.LogError("[SERVER] Failed to deserialize TRAP_PLACED message");
         }
     }
 
-    private void ProcessServerTrapTriggeredMessage(byte[] buffer, int length)
+    private void ProcessServerTrapTriggeredMessage(byte[] buffer, int length, ClientProxy client)
     {
-        TrapTriggeredMessage triggerMsg = NetworkSerializer.Deserialize<TrapTriggeredMessage>(buffer, length);
-        
-        if (triggerMsg != null && replicationManager != null)
+        TrapTriggeredMessage triggeredMsg = NetworkSerializer.Deserialize<TrapTriggeredMessage>(buffer, length);
+        if (triggeredMsg != null)
         {
-            Debug.Log($"[SERVER] Player {triggerMsg.triggeredPlayerID} triggered trap");
-            
-            byte[] data = NetworkSerializer.Serialize(triggerMsg);
+            Debug.Log($"[SERVER] Trap at {triggeredMsg.GetPosition()} was triggered by player {triggeredMsg.triggeredPlayerID}");
+
+            if (client != null)
+            {
+                SimpleMessage ackMsg = new SimpleMessage("ACK_TRAP", triggeredMsg.GetPosition().ToString());
+                byte[] ackData = NetworkSerializer.Serialize(ackMsg);
+                if (ackData != null)
+                {
+                    SendPacket(ackData, client.endpoint);
+                }
+            }
+
+            byte[] data = NetworkSerializer.Serialize(triggeredMsg);
             if (data != null)
+            {
                 BroadcastToClients(data, null);
+                Debug.Log($"[SERVER] Broadcasted TRAP_TRIGGERED to all clients");
+            }
         }
     }
 
@@ -2174,7 +2247,17 @@ public class Networking : MonoBehaviour
     private void ClearPendingStateForNewScene()
     {
         if (enableReliability && reliabilityManager != null)
-            reliabilityManager.ClearPendingPackets();
+        reliabilityManager.ClearPendingPackets();
+
+        lock (trapTriggeredTimestampLock)
+        {
+            lastTrapTriggeredTimestamps.Clear();
+        }
+
+        lock (pushTimestampLock)
+        {
+            lastPushTimestamps.Clear();
+        }
 
         lock (keyCollectedLock)
         {

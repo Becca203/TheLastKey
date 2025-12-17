@@ -12,6 +12,7 @@ public class TrapBehaviour : MonoBehaviour
     [Header("UI Abilities")]
     [SerializeField] private Abilities abilitiesUI;
 
+    private Networking networking;  
     private NetworkPlayer networkPlayer;
     private Collider2D playerCollider;
     private float cooldownTimer = 0f;
@@ -21,15 +22,25 @@ public class TrapBehaviour : MonoBehaviour
     private bool isActive = false;
     private bool isTrapInstance = false;
 
+    private bool hasTriggered = false;
+
     private void Start()
     {
+        Networking[] allNetworkings = FindObjectsByType<Networking>(FindObjectsSortMode.None);
+        foreach (Networking net in allNetworkings)
+        {
+            if (net.mode == Networking.NetworkMode.Client)
+            {
+                networking = net;
+                break;
+            }
+        }
+
         networkPlayer = GetComponent<NetworkPlayer>();
-        
         if (networkPlayer != null)
         {
             playerCollider = GetComponent<Collider2D>();
             isTrapInstance = false;
-
             if (abilitiesUI == null)
                 abilitiesUI = GetComponentInChildren<Abilities>(true);
         }
@@ -85,19 +96,7 @@ public class TrapBehaviour : MonoBehaviour
 
     private void SendPlaceTrapMessage(Vector3 position)
     {
-        Networking[] allNetworkings = FindObjectsByType<Networking>(FindObjectsSortMode.None);
-        Networking clientNetworking = null;
-        
-        foreach (Networking net in allNetworkings)
-        {
-            if (net.mode == Networking.NetworkMode.Client)
-            {
-                clientNetworking = net;
-                break;
-            }
-        }
-
-        if (clientNetworking != null)
+        if (networking != null)
         {
             TrapPlacedMessage msg = new TrapPlacedMessage(
                 networkPlayer.playerID,
@@ -108,9 +107,18 @@ public class TrapBehaviour : MonoBehaviour
             
             if (data != null)
             {
-                clientNetworking.SendBytesReliable(data, "TRAP_PLACED");
-                Debug.Log($"[TrapBehaviour] Sent TRAP_PLACED message");
+                Debug.Log($"[TrapBehaviour] Sending TRAP_PLACED with {data.Length} bytes"); 
+                networking.SendBytesReliable(data, "TRAP_PLACED");
+                Debug.Log($"[TrapBehaviour] TRAP_PLACED message sent");
             }
+            else
+            {
+                Debug.LogError("[TrapBehaviour] Failed to serialize TRAP_PLACED"); 
+            }
+        }
+        else
+        {
+            Debug.LogError("[TrapBehaviour] Client networking instance not found!");
         }
     }
 
@@ -119,6 +127,7 @@ public class TrapBehaviour : MonoBehaviour
     {
         isTrapInstance = true;
         ownerPlayerID = playerID;
+        hasTriggered = false;
         Invoke(nameof(ActivateTrap), activationDelay);
         Debug.Log($"[TrapBehaviour] Trap initialized by player {playerID} at {transform.position}");
     }
@@ -130,7 +139,8 @@ public class TrapBehaviour : MonoBehaviour
 
     private void OnTriggerEnter2D(Collider2D collision)
     {
-        if (!isTrapInstance || !isActive) return;
+         if (!isTrapInstance || !isActive) return;
+        if (hasTriggered) return;
 
         if (collision.CompareTag(playerTag))
         {
@@ -139,34 +149,33 @@ public class TrapBehaviour : MonoBehaviour
             {
                 Debug.Log($"[TrapBehaviour] Player {hitPlayer.playerID} hit by trap placed by player {ownerPlayerID}");
                 SendTrapTriggeredMessage(hitPlayer.playerID);
-                Destroy(gameObject);
+                
+                isActive = false; 
+                GetComponent<Collider2D>().enabled = false;
+                hasTriggered = true;
             }
         }
     }
 
     private void SendTrapTriggeredMessage(int hitPlayerID)
     {
-        Networking[] allNetworkings = FindObjectsByType<Networking>(FindObjectsSortMode.None);
-        Networking clientNetworking = null;
-        
-        foreach (Networking net in allNetworkings)
-        {
-            if (net.mode == Networking.NetworkMode.Client)
-            {
-                clientNetworking = net;
-                break;
-            }
-        }
-
-        if (clientNetworking != null)
+        if (networking != null)
         {
             TrapTriggeredMessage msg = new TrapTriggeredMessage(hitPlayerID, transform.position);
             byte[] data = NetworkSerializer.Serialize(msg);
             
             if (data != null)
             {
-                clientNetworking.SendBytesReliable(data, "TRAP_TRIGGERED");
+                networking.SendBytesReliable(data, "TRAP_TRIGGERED");
                 Debug.Log($"[TrapBehaviour] Sent TRAP_TRIGGERED message for player {hitPlayerID}");
+                
+                TrapDestroyMessage destroyMsg = new TrapDestroyMessage(transform.position);
+                byte[] destroyData = NetworkSerializer.Serialize(destroyMsg);
+                if (destroyData != null)
+                {
+                    networking.SendBytesReliable(destroyData, "TRAP_DESTROY");
+                    Debug.Log($"[TrapBehaviour] Sent TRAP_DESTROY message");
+                }
             }
         }
     }
