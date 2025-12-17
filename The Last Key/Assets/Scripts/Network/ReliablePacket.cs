@@ -118,4 +118,11 @@ public class ReliabilityManager
     public uint GetLastAckedSequence() => lastAckedSequence;
 
     public int GetPendingPacketCount() => pendingPackets.Count;
+
+    public void ClearPendingPackets()
+    {
+        pendingPackets.Clear();
+        retransmitCounts.Clear();
+        Debug.Log("[ReliabilityManager] Cleared pending reliable packets");
+    }
 }

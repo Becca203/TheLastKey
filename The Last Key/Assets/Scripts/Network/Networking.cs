@@ -122,6 +122,7 @@ public class Networking : MonoBehaviour
     private object cameraSwitchLock = new object();
 
     private bool connectionFailed = false;
+    private bool isReturningToMenu = false;
 
     private Dictionary<int, long> lastPushTimestamps = new Dictionary<int, long>();
     private object pushTimestampLock = new object();
@@ -1371,28 +1372,17 @@ public class Networking : MonoBehaviour
         LoadSceneMessage sceneMsg = NetworkSerializer.Deserialize<LoadSceneMessage>(buffer, length);
         if (sceneMsg != null && !string.IsNullOrEmpty(sceneMsg.sceneName))
         {
-            // Queue the player state reset to be executed on the main thread
             lock (mainThreadActionsLock)
             {
-                mainThreadActions.Enqueue(() =>
-                {
-                    // Reset player states before scene change
-                    GameManager gameManager = GameManager.Instance;
-                    if (gameManager != null)
-                    {
-                        NetworkPlayer[] allPlayers = FindObjectsByType<NetworkPlayer>(FindObjectsSortMode.None);
-                        foreach (NetworkPlayer player in allPlayers)
-                        {
-                            player.SetHasKey(false);
-                        }
-                    }
-                });
+                mainThreadActions.Enqueue(() => SceneManager.LoadSceneAsync(sceneMsg.sceneName));
             }
             
             lock (sceneLoadLock)
             {
-                pendingSceneToLoad = sceneMsg.sceneName;
                 hasPendingSceneToLoad = true;
+                pendingSceneToLoad = sceneMsg.sceneName;
+                isReturningToMenu = sceneMsg.sceneName == "MainMenu";
+                ClearPendingStateForNewScene(); 
             }
         }
     }
@@ -2199,6 +2189,39 @@ public class Networking : MonoBehaviour
             {
                 Debug.LogWarning($"[CLIENT] Could not send quit notification: {e.Message}");
             }
+        }
+    }
+
+    private void ClearPendingStateForNewScene()
+    {
+        if (enableReliability && reliabilityManager != null)
+            reliabilityManager.ClearPendingPackets();
+
+        lock (keyCollectedLock)
+        {
+            hasPendingKeyCollected = false;
+            keyCollected = false;
+            keyOwnerPlayerID = -1;
+        }
+
+        lock (keyTransferLock)
+        {
+            hasPendingKeyTransfer = false;
+        }
+
+        lock (hideKeyLock)
+        {
+            shouldHideKey = false;
+        }
+
+        lock (levelCompleteLock)
+        {
+            shouldShowLevelTransitionUI = false;
+        }
+
+        lock (cameraSwitchLock)
+        {
+            shouldSwitchToMainCamera = false;
         }
     }
 
