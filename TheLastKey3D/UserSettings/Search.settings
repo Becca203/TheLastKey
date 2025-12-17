@@ -11,7 +11,7 @@ showStatusBar = false
 scopes = {
 	"last_search.66F56946" = "inspector"
 	"OpenInspectorPreview.66F56946" = "0"
-	"currentGroup.66F56946" = null
+	"currentGroup.66F56946" = ""
 }
 providers = {
 	asset = {
@@ -68,6 +68,8 @@ providers = {
 objectSelectors = {
 }
 recentSearches = [
+	"inspector"
+	"ins"
 	"inspec"
 ]
 searchItemFavorites = [
@@ -83,3 +85,4 @@ helperWidgetCurrentArea = "all"
 disabledIndexers = ""
 minIndexVariations = 2
 findProviderIndexHelper = true
+itemIconSize = 32
