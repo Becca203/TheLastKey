@@ -418,7 +418,7 @@ SpriteRenderer:
   m_Size: {x: 1, y: 2}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
-  m_WasSpriteAssigned: 1
+  m_WasSpriteAssigned: 0
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!114 &5378098619891921969
@@ -690,6 +690,7 @@ GameObject:
   - component: {fileID: 5308415083624705146}
   - component: {fileID: 661833447137638027}
   - component: {fileID: 8052525047358897337}
+  - component: {fileID: 1565246945563592195}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -768,7 +769,7 @@ SpriteRenderer:
   m_Size: {x: 1, y: 2}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
-  m_WasSpriteAssigned: 1
+  m_WasSpriteAssigned: 0
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!114 &3085826134432433630
@@ -922,11 +923,6 @@ MonoBehaviour:
   activationDelay: 0.2
   trapPrefab: {fileID: 8236807058294328366, guid: 5676cc47c9ebeff44ba9eeab7ffe3e0a, type: 3}
   spawnYOffset: 0.3
-  groundDetectionDistance: 2
-  raycastOffset: 0.1
-  groundLayer:
-    serializedVersion: 2
-    m_Bits: 8
   abilitiesUI: {fileID: 8052525047358897337}
 --- !u!114 &8052525047358897337
 MonoBehaviour:
@@ -944,3 +940,25 @@ MonoBehaviour:
   abilityText1: {fileID: 9188428025284342307}
   ability1Key: 101
   ability1Cooldown: 9
+--- !u!95 &1565246945563592195
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8347890613596116628}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 8364143d4c03e644c82854c4ae0a36c9, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
