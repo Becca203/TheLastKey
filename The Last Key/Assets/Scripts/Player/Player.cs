@@ -34,7 +34,6 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
         _col = GetComponent<CapsuleCollider2D>();
         _networkPlayer = GetComponent<NetworkPlayer>();
 
-        // ✅ AÑADE ESTA VERIFICACIÓN
         if (_networkPlayer == null)
         {
             Debug.LogError("[PlayerMovement2D] NetworkPlayer component NOT FOUND!");
@@ -85,7 +84,6 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
 
     private void FixedUpdate()
     {
-        // ✅ AÑADE ESTE LOG
         if (_networkPlayer != null)
         {
             Debug.Log($"[PlayerMovement2D] Player {_networkPlayer.playerID} isPushed={_networkPlayer.isPushed}, isLocal={_networkPlayer.isLocalPlayer}");
@@ -93,6 +91,7 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
         
         if (_networkPlayer != null && _networkPlayer.isPushed)
         {
+            Debug.Log($"[PlayerMovement2D] Player {_networkPlayer.playerID} is PUSHED at {transform.position} - SKIPPING normal physics");
             HandleDirectionDuringPush();
             return;
         }

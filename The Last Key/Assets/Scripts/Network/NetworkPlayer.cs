@@ -89,9 +89,15 @@ public class NetworkPlayer : MonoBehaviour
             {
                 lastReceivedPosition = transform.position;
                 targetPosition = transform.position;
+                SendPositionUpdate(); 
+            }
+            else
+            {
+                lastReceivedPosition = transform.position;
+                targetPosition = transform.position;
             }
             lastReceivedVelocity = Vector2.zero;
-            targetVelocity = rb != null ? rb.linearVelocity : Vector2.zero;
+            targetVelocity = Vector2.zero;
             lastUpdateTime = Time.time;
             interpolationAlpha = 0f;
 
@@ -104,6 +110,15 @@ public class NetworkPlayer : MonoBehaviour
             {
                 sendTimer += Time.deltaTime;
                 if (sendTimer >= 1f / sendRate)
+                {
+                    SendPositionUpdate();
+                    sendTimer = 0f;
+                }
+            }
+            else
+            {
+                sendTimer += Time.deltaTime;
+                if (sendTimer >= 0.1f) 
                 {
                     SendPositionUpdate();
                     sendTimer = 0f;
@@ -173,7 +188,11 @@ public class NetworkPlayer : MonoBehaviour
 
     public void UpdatePosition(Vector3 position, Vector2 velocity)
     {
-        if (isPushed) return;
+        if (isPushed)
+        {
+            Debug.Log($"[NetworkPlayer] Ignoring position update for pushed player {playerID}");
+            return;
+        }
 
         if (!isLocalPlayer)
         {
@@ -216,25 +235,25 @@ public class NetworkPlayer : MonoBehaviour
 
     public void StartPush(Vector2 velocity, float duration)
     {
+        positionBeforePush = transform.position;
+
         isPushed = true;
-        pushVelocity = velocity;
         pushRecoveryTime = Time.time + duration;
         pushEndTime = Time.time + duration;
-
-        positionBeforePush = transform.position;
 
         lastReceivedPosition = transform.position;
         targetPosition = transform.position;
         lastReceivedVelocity = Vector2.zero;
-        targetVelocity = velocity;
+        targetVelocity = Vector2.zero;
         interpolationAlpha = 0f;
+        lastUpdateTime = Time.time;
         
         if (rb != null)
         {
             rb.linearVelocity = velocity;
         }
         
-        Debug.Log($"[NetworkPlayer] Player {playerID} START PUSH with velocity {velocity} for {duration}s (isLocal: {isLocalPlayer})");
+        Debug.Log($"[NetworkPlayer] Player {playerID} START PUSH with velocity {velocity} for {duration}s (isLocal: {isLocalPlayer}, position: {transform.position})");
     }
 
     private void SendKeyCollectedMessage()

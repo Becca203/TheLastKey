@@ -165,6 +165,11 @@ public class GameManager : MonoBehaviour
     {
         if (remoteNetworkPlayer != null && remoteNetworkPlayer.playerID == playerID)
         {
+            if (remoteNetworkPlayer.isPushed)
+            {
+                Debug.Log($"[GameManager] Ignoring position update for pushed player {playerID}");
+                return;
+            }
             remoteNetworkPlayer.UpdatePosition(position, velocity);
         }
     }

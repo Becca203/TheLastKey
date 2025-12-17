@@ -111,8 +111,12 @@ public class PushMessage : NetworkMessage
     public float velocityX;
     public float velocityY;
     public float duration;
+    public long timestamp;
 
-    public PushMessage() : base("PUSH") { }
+    public PushMessage() : base("PUSH") 
+    {
+        timestamp = DateTime.Now.Ticks;
+    }
 
     public PushMessage(int playerID, Vector2 velocity, float dur) : base("PUSH")
     {
@@ -120,6 +124,7 @@ public class PushMessage : NetworkMessage
         velocityX = velocity.x;
         velocityY = velocity.y;
         duration = dur;
+        timestamp = DateTime.Now.Ticks; 
     }
 }
 
@@ -164,7 +169,6 @@ public class CameraSwitchMessage : NetworkMessage
     }
 }
 
-// ✅ Mensaje para colocar trampa
 [Serializable]
 public class TrapPlacedMessage : NetworkMessage
 {
@@ -187,7 +191,6 @@ public class TrapPlacedMessage : NetworkMessage
     }
 }
 
-// ✅ Mensaje para activar trampa
 [Serializable]
 public class TrapTriggeredMessage : NetworkMessage
 {

@@ -123,6 +123,9 @@ public class Networking : MonoBehaviour
 
     private bool connectionFailed = false;
 
+    private Dictionary<int, long> lastPushTimestamps = new Dictionary<int, long>();
+    private object pushTimestampLock = new object();
+
     private struct PositionUpdate
     {
         public int playerID;
@@ -789,17 +792,27 @@ public class Networking : MonoBehaviour
                 if (gameManager != null)
                 {
                     NetworkPlayer player = gameManager.FindPlayerByID(pendingPush.playerID);
+                    
                     if (player != null)
                     {
-                        Debug.Log($"[Networking] Applying PUSH to LOCAL Player {player.playerID}: vel={pendingPush.velocity}, dur={pendingPush.duration}");
-                        player.StartPush(pendingPush.velocity, pendingPush.duration);
+                        if (player.isPushed)
+                        {
+                            Debug.Log($"[Networking] DISCARDING queued PUSH - Player {pendingPush.playerID} already pushed");
+                            hasPendingPush = false;
+                        }
+                        else
+                        {
+                            Debug.Log($"[Networking] Applying PUSH to {(player.isLocalPlayer ? "LOCAL" : "REMOTE")} Player {pendingPush.playerID}: vel={pendingPush.velocity}, dur={pendingPush.duration}");
+                            player.StartPush(pendingPush.velocity, pendingPush.duration);
+                            hasPendingPush = false;
+                        }
                     }
                     else
                     {
-                        Debug.LogError($"[Networking] Player {pendingPush.playerID} not found for PUSH");
+                        Debug.LogError($"[Networking] Player {pendingPush.playerID} not found for push");
+                        hasPendingPush = false;
                     }
                 }
-                hasPendingPush = false;
             }
         }
 
@@ -1233,6 +1246,17 @@ public class Networking : MonoBehaviour
         PositionMessage posMsg = NetworkSerializer.Deserialize<PositionMessage>(buffer, length);
         if (posMsg != null)
         {
+            GameManager gameManager = GameManager.Instance;
+            if (gameManager != null)
+            {
+                NetworkPlayer player = gameManager.FindPlayerByID(posMsg.playerID);
+                if (player != null && player.isPushed)
+                {
+                    Debug.Log($"[Networking] DISCARDING position update for pushed Player {posMsg.playerID}");
+                    return; 
+                }
+            }
+
             lock (positionLock)
             {
                 pendingPositionUpdate = new PositionUpdate
@@ -1287,20 +1311,58 @@ public class Networking : MonoBehaviour
     private void ProcessPushMessage(byte[] buffer, int length)
     {
         PushMessage pushMsg = NetworkSerializer.Deserialize<PushMessage>(buffer, length);
-        if (pushMsg != null)
+        if (pushMsg == null) return;
+
+        Debug.Log($"[Networking] Received PUSH for pushedPlayerID = {pushMsg.pushedPlayerID}");
+
+        lock (pushTimestampLock)
         {
-            Debug.Log($"[Networking] Received PUSH for pushedPlayerID = {pushMsg.pushedPlayerID}"); 
-            
-            lock (pushLock)
+            if (lastPushTimestamps.ContainsKey(pushMsg.pushedPlayerID))
             {
-                pendingPush = new PushData
+                long lastTimestamp = lastPushTimestamps[pushMsg.pushedPlayerID];
+                if (pushMsg.timestamp <= lastTimestamp)
                 {
-                    playerID = pushMsg.pushedPlayerID,
-                    velocity = new Vector2(pushMsg.velocityX, pushMsg.velocityY),
-                    duration = pushMsg.duration
-                };
-                hasPendingPush = true;
+                    Debug.Log($"[Networking] IGNORING PUSH - Duplicate/old message (timestamp: {pushMsg.timestamp} <= {lastTimestamp})");
+                    return;
+                }
             }
+            lastPushTimestamps[pushMsg.pushedPlayerID] = pushMsg.timestamp;
+        }
+
+        GameManager gameManager = GameManager.Instance;
+        if (gameManager != null)
+        {
+            NetworkPlayer player = gameManager.FindPlayerByID(pushMsg.pushedPlayerID);
+            if (player != null && player.isPushed)
+            {
+                Debug.Log($"[Networking] IGNORING PUSH - Player {pushMsg.pushedPlayerID} is already pushed");
+                
+                lock (pushLock)
+                {
+                    if (hasPendingPush && pendingPush.playerID == pushMsg.pushedPlayerID)
+                    {
+                        hasPendingPush = false;
+                    }
+                }
+                return;
+            }
+        }
+
+        lock (pushLock)
+        {
+            if (hasPendingPush && pendingPush.playerID == pushMsg.pushedPlayerID)
+            {
+                Debug.Log($"[Networking] IGNORING PUSH - Already have pending push for Player {pushMsg.pushedPlayerID}");
+                return;
+            }
+
+            pendingPush = new PushData
+            {
+                playerID = pushMsg.pushedPlayerID,
+                velocity = new Vector2(pushMsg.velocityX, pushMsg.velocityY),
+                duration = pushMsg.duration
+            };
+            hasPendingPush = true;
         }
     }
 
@@ -1729,7 +1791,18 @@ public class Networking : MonoBehaviour
     private void ProcessServerPushMessage(byte[] buffer, int length)
     {
         PushMessage pushMsg = NetworkSerializer.Deserialize<PushMessage>(buffer, length);
-        if (pushMsg != null && replicationManager != null)
+        if (pushMsg == null) return;
+
+        Debug.Log($"[SERVER] Received PUSH for Player {pushMsg.pushedPlayerID}");
+
+        byte[] data = NetworkSerializer.Serialize(pushMsg);
+        if (data != null)
+        {
+            BroadcastToClients(data, null);
+            Debug.Log($"[SERVER] Broadcasted PUSH to all clients for Player {pushMsg.pushedPlayerID}");
+        }
+
+        if (replicationManager != null)
         {
             replicationManager.ReplicatePush(
                 pushMsg.pushedPlayerID,
@@ -1876,6 +1949,7 @@ public class Networking : MonoBehaviour
         {
             case "KEY_COLLECTED":
             case "KEY_TRANSFER":
+            case "PUSH": 
             case "TRAP_PLACED":
             case "TRAP_TRIGGERED":
             case "START_GAME":
