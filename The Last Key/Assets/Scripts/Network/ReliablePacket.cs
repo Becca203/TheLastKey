@@ -35,9 +35,9 @@ public class ReliabilityManager
     private Dictionary<uint, (ReliablePacket packet, float sendTime)> 
     pendingPackets = new Dictionary<uint, (ReliablePacket, float)>();
 
-    [SerializeField] private float ackTimeout = 2f;  // If no ACK in this time, retransmit
-    [SerializeField] private float maxRetransmitTime = 10f;   
-    [SerializeField] private int maxRetransmits = 3;        
+    [SerializeField] private float ackTimeout = 3f;  // If no ACK in this time, retransmit
+    [SerializeField] private float maxRetransmitTime = 5f;   
+    [SerializeField] private int maxRetransmits = 2;        
 
     private Dictionary<uint, int> retransmitCounts = new Dictionary<uint, int>();
 
@@ -84,14 +84,12 @@ public class ReliabilityManager
             if (elapsed > maxRetransmitTime)
             {
                 toRemove.Add(seq);
-                Debug.LogWarning($"[ReliabilityManager] Packet {seq} discarded (maximum timeout)");
                 continue;
             }
 
             if (retransmitCounts.ContainsKey(seq) && retransmitCounts[seq] >= maxRetransmits)
             {
                 toRemove.Add(seq);
-                Debug.LogWarning($"[ReliabilityManager] Packet {seq} discarded (maximum retransmit attempts)");
                 continue;
             }
 
@@ -102,7 +100,6 @@ public class ReliabilityManager
                     retransmitCounts[seq] = 0;
                 retransmitCounts[seq]++;
                 pendingPackets[seq] = (packet, currentTime);
-                Debug.Log($"[ReliabilityManager] Retransmitiendo paquete {seq} (intento {retransmitCounts[seq]})");
             }
         }
 
@@ -123,6 +120,5 @@ public class ReliabilityManager
     {
         pendingPackets.Clear();
         retransmitCounts.Clear();
-        Debug.Log("[ReliabilityManager] Cleared pending reliable packets");
     }
 }

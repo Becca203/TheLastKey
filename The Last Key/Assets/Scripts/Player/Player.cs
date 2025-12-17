@@ -83,15 +83,9 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
     }
 
     private void FixedUpdate()
-    {
-        if (_networkPlayer != null)
-        {
-            Debug.Log($"[PlayerMovement2D] Player {_networkPlayer.playerID} isPushed={_networkPlayer.isPushed}, isLocal={_networkPlayer.isLocalPlayer}");
-        }
-        
+    {  
         if (_networkPlayer != null && _networkPlayer.isPushed)
         {
-            Debug.Log($"[PlayerMovement2D] Player {_networkPlayer.playerID} is PUSHED at {transform.position} - SKIPPING normal physics");
             HandleDirectionDuringPush();
             return;
         }

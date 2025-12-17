@@ -6,7 +6,7 @@ public class NetworkPlayer : MonoBehaviour
     public int playerID = 0;
 
     [Header("Network Settings")]
-    [SerializeField] private float sendRate = 60f;
+    [SerializeField] private float sendRate = 30f;
     [SerializeField] private float interpolationSpeed = 10f;
 
     [Header("Key Status")]
@@ -74,7 +74,6 @@ public class NetworkPlayer : MonoBehaviour
         {
             rb.bodyType = RigidbodyType2D.Dynamic;
             rb.gravityScale = 0f;
-            Debug.Log($"[NetworkPlayer] Player {playerID} is DYNAMIC (isLocal: {isLocalPlayer})");
         }
     }
 
@@ -100,8 +99,6 @@ public class NetworkPlayer : MonoBehaviour
             targetVelocity = Vector2.zero;
             lastUpdateTime = Time.time;
             interpolationAlpha = 0f;
-
-            Debug.Log($"[NetworkPlayer] Player {playerID} recovered from push at position {transform.position}");
         }
 
         if (isLocalPlayer)
@@ -163,7 +160,6 @@ public class NetworkPlayer : MonoBehaviour
             Vector2 currentVel = rb.linearVelocity;
             currentVel.y -= pushGravity * Time.fixedDeltaTime;
             rb.linearVelocity = currentVel;
-            
         }
     }
 

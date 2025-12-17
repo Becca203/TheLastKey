@@ -115,7 +115,6 @@ public class PlayerPushDetector : MonoBehaviour
             targetPlayer.StartPush(pushVelocity, pushDuration);
 
             SendPushMessage(targetPlayer.playerID, pushVelocity, pushDuration);
-            Debug.Log($"[Push] Applied locally and sent push for Player {targetPlayer.playerID}");
         }
     }
 
@@ -130,7 +129,6 @@ public class PlayerPushDetector : MonoBehaviour
             if (data != null)
             {
                 networking.SendBytesReliable(data, "PUSH");
-                Debug.Log($"[Push] Sent PUSH message for Player {targetPlayerID} (RELIABLE)");
             }
         }
     }
@@ -148,8 +146,6 @@ public class PlayerPushDetector : MonoBehaviour
             elapsed += Time.fixedDeltaTime;
             yield return new WaitForFixedUpdate();
         }
-        
-        Debug.Log("Push gravity ended");
         
         // NEW: Stop tracking pushed player
         if (pushedPlayer != null && pushedPlayer.GetComponent<Rigidbody2D>() == rb)

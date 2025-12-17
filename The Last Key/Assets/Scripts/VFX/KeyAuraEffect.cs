@@ -71,8 +71,6 @@ public class KeyAuraEffect : MonoBehaviour
 
             blurSprites[i] = sr;
         }
-
-        Debug.Log("KeyAuraEffect: Created " + blurLayers + " blur layers");
     }
 
     void Update()
@@ -110,7 +108,6 @@ public class KeyAuraEffect : MonoBehaviour
             mainSprite = GetComponent<SpriteRenderer>();
 
         CreateBlurLayers();
-        Debug.Log("KeyAuraEffect: OnEnable - Aura activada");
     }
 
     void OnDisable()
@@ -124,6 +121,5 @@ public class KeyAuraEffect : MonoBehaviour
             }
             blurSprites = null;
         }
-        Debug.Log("KeyAuraEffect: OnDisable - Aura desactivada");
     }
 }

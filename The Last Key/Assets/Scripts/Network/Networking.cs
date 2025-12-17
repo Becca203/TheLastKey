@@ -1251,11 +1251,7 @@ public class Networking : MonoBehaviour
             if (gameManager != null)
             {
                 NetworkPlayer player = gameManager.FindPlayerByID(posMsg.playerID);
-                if (player != null && player.isPushed)
-                {
-                    Debug.Log($"[Networking] DISCARDING position update for pushed Player {posMsg.playerID}");
-                    return; 
-                }
+                if (player != null && player.isPushed) return;
             }
 
             lock (positionLock)
@@ -1314,18 +1310,12 @@ public class Networking : MonoBehaviour
         PushMessage pushMsg = NetworkSerializer.Deserialize<PushMessage>(buffer, length);
         if (pushMsg == null) return;
 
-        Debug.Log($"[Networking] Received PUSH for pushedPlayerID = {pushMsg.pushedPlayerID}");
-
         lock (pushTimestampLock)
         {
             if (lastPushTimestamps.ContainsKey(pushMsg.pushedPlayerID))
             {
                 long lastTimestamp = lastPushTimestamps[pushMsg.pushedPlayerID];
-                if (pushMsg.timestamp <= lastTimestamp)
-                {
-                    Debug.Log($"[Networking] IGNORING PUSH - Duplicate/old message (timestamp: {pushMsg.timestamp} <= {lastTimestamp})");
-                    return;
-                }
+                if (pushMsg.timestamp <= lastTimestamp) return;
             }
             lastPushTimestamps[pushMsg.pushedPlayerID] = pushMsg.timestamp;
         }
@@ -1335,9 +1325,7 @@ public class Networking : MonoBehaviour
         {
             NetworkPlayer player = gameManager.FindPlayerByID(pushMsg.pushedPlayerID);
             if (player != null && player.isPushed)
-            {
-                Debug.Log($"[Networking] IGNORING PUSH - Player {pushMsg.pushedPlayerID} is already pushed");
-                
+            {        
                 lock (pushLock)
                 {
                     if (hasPendingPush && pendingPush.playerID == pushMsg.pushedPlayerID)
@@ -1351,11 +1339,7 @@ public class Networking : MonoBehaviour
 
         lock (pushLock)
         {
-            if (hasPendingPush && pendingPush.playerID == pushMsg.pushedPlayerID)
-            {
-                Debug.Log($"[Networking] IGNORING PUSH - Already have pending push for Player {pushMsg.pushedPlayerID}");
-                return;
-            }
+            if (hasPendingPush && pendingPush.playerID == pushMsg.pushedPlayerID) return;
 
             pendingPush = new PushData
             {
@@ -1415,8 +1399,6 @@ public class Networking : MonoBehaviour
                     position = trapMsg.GetPosition()
                 };
                 hasPendingTrapPlacement = true;
-                
-                Debug.Log($"[Networking] Client received TRAP_PLACED from Player {trapMsg.playerID}");
             }
         }
     }
@@ -1432,8 +1414,6 @@ public class Networking : MonoBehaviour
                 pendingTrapTriggeredPlayerID = triggerMsg.triggeredPlayerID;
                 pendingTrapPosition = triggerMsg.GetPosition();
                 hasPendingTrapTriggered = true;
-                
-                Debug.Log($"[Networking] Client received TRAP_TRIGGERED for Player {triggerMsg.triggeredPlayerID}");
             }
         }
     }
@@ -1984,7 +1964,6 @@ public class Networking : MonoBehaviour
         {
             SendBytes(packetData);
             reliabilityManager.RegisterPendingPacket(packet);
-            Debug.Log($"[RELIABLE] Sent packet #{packet.sequenceNumber} ({messageType})");
         }
     }
 
