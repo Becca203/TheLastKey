@@ -17,17 +17,5 @@ The Last Key it’s a competitive 2D platformer where two players face off again
  - Key A-> move left
  - Key D  -> move right
  - Key SPACE -> move up
-
-## Next Steps
-
- - Main game mechanics
- - Victory/Lose condition
-## Next Steps
-  Carla Puga:  
-  Scenes: MainMenu, Server Scene, WaitingRoom  
-  Scripts: ClientManager, UDPClient, UDPServer, WaitingRoom  
-  Rebeca Fernández: GameScene, Player, Serialization   
-  Rodrigo Álvarez: ClientUDP, Serialization    
-  Miguel Turmo: Code revision    
-  Lluc Cid: Player, Serialization   
-     
+ - Q -> toggle camera distance
+ - Mouse left click -> push & steal key
