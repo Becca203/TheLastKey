@@ -34,13 +34,10 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
         _col = GetComponent<CapsuleCollider2D>();
         _networkPlayer = GetComponent<NetworkPlayer>();
 
+        // Ensure networking component is present; no runtime logging required
         if (_networkPlayer == null)
         {
-            Debug.LogError("[PlayerMovement2D] NetworkPlayer component NOT FOUND!");
-        }
-        else
-        {
-            Debug.Log($"[PlayerMovement2D] NetworkPlayer found: playerID={_networkPlayer.playerID}, isLocal={_networkPlayer.isLocalPlayer}");
+            // NetworkPlayer missing - behavior will continue without logging
         }
 
         _rb.gravityScale = 0f;
@@ -226,7 +223,8 @@ public class PlayerMovement2D : MonoBehaviour, IPlayerController
 #if UNITY_EDITOR
     private void OnValidate()
     {
-        if (_stats == null) Debug.LogWarning("Please assign a ScriptableStats asset to the Player Controller's Stats slot", this);
+        // Validate assigned stats asset in editor; no runtime log
+        if (_stats == null) {}
     }
 #endif
 }

@@ -26,12 +26,8 @@ public class WaitingRoom : MonoBehaviour
     private void Start()
     {
         AddChatMessage("System", "Welcome to the waiting room!");
-
-        
         if (IsServer())
-        {
             DisplayLocalIP();
-        }
 
         if (playButton != null)
         {
@@ -45,7 +41,7 @@ public class WaitingRoom : MonoBehaviour
         if (!string.IsNullOrEmpty(myUsername))
         {
             AddPlayer(myUsername);
-            Debug.Log($"[WaitingRoom] Added local player: {myUsername}");
+            // Local player added; no runtime log
         }
         
         UpdateInfo();
@@ -78,9 +74,9 @@ public class WaitingRoom : MonoBehaviour
                 }
             }
         }
-        catch (System.Exception e)
+        catch (System.Exception)
         {
-            Debug.LogError($"[WaitingRoom] Error getting IP: {e.Message}");
+            // Error while obtaining IP; suppressed runtime log
         }
 
         return "127.0.0.1";
@@ -96,7 +92,7 @@ public class WaitingRoom : MonoBehaviour
             if (data != null)
             {
                 networking.SendBytes(data);
-                Debug.Log("[WaitingRoom] Sent START_GAME request");
+                // START_GAME request sent; no runtime log
             
                 if (playButton != null)
                 {

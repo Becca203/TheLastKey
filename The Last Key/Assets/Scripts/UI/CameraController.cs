@@ -9,7 +9,7 @@ public class CameraSequenceManager : MonoBehaviour
 
     [Header("Transition Settings")]
     [SerializeField] private AnimationCurve transitionCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
-    [SerializeField] private float zoomAmount = 0.5f; // Cuánto se reduce el tamaño ortográfico (zoom in)
+    [SerializeField] private float zoomAmount = 0.5f; // Cuï¿½nto se reduce el tamaï¿½o ortogrï¿½fico (zoom in)
 
     private Camera mainCamera;
     private bool sequenceStarted = false;
@@ -18,10 +18,7 @@ public class CameraSequenceManager : MonoBehaviour
 
     void Start()
     {
-        // Buscar la Main Camera en la escena
         FindAndSetupMainCamera();
-
-        // Esperar a que el jugador local esté listo
         StartCoroutine(WaitForLocalPlayerAndStartSequence());
     }
 
@@ -37,17 +34,12 @@ public class CameraSequenceManager : MonoBehaviour
         {
             mainCamera = mainCameraObj.GetComponent<Camera>();
             mainCamera.enabled = true;
-            Debug.Log("[CameraSequenceManager] Main Camera found and enabled");
-        }
-        else
-        {
-            Debug.LogError("[CameraSequenceManager] Main Camera not found!");
         }
     }
 
     private IEnumerator WaitForLocalPlayerAndStartSequence()
     {
-        // Esperar hasta que el jugador local esté instanciado
+        // Wait until the local player is instantiated
         while (localPlayer == null)
         {
             NetworkPlayer[] players = FindObjectsByType<NetworkPlayer>(FindObjectsSortMode.None);
@@ -60,9 +52,7 @@ public class CameraSequenceManager : MonoBehaviour
 
                     if (localPlayerCamera != null)
                     {
-                        // Asegurarse de que la Player Camera esté desactivada al inicio
                         localPlayerCamera.SetCameraActive(false);
-                        Debug.Log("[CameraSequenceManager] Local player found, player camera disabled");
                     }
                     break;
                 }
@@ -70,7 +60,7 @@ public class CameraSequenceManager : MonoBehaviour
             yield return new WaitForSeconds(0.1f);
         }
 
-        // Iniciar la secuencia de cámaras
+        // Iniciar la secuencia de cï¿½maras
         StartCoroutine(CameraSequence());
     }
 
@@ -79,14 +69,14 @@ public class CameraSequenceManager : MonoBehaviour
         if (sequenceStarted) yield break;
         sequenceStarted = true;
 
-        Debug.Log("[CameraSequenceManager] Starting camera sequence - Main Camera active");
+    // Starting camera sequence; no runtime logs
 
         // Paso 1: Esperar 3 segundos con la Main Camera activa
         yield return new WaitForSeconds(initialWaitTime);
 
-        Debug.Log("[CameraSequenceManager] Starting transition to Player Camera");
+    // Starting transition to player camera
 
-        // Paso 2: Transición con zoom de 2 segundos
+        // Paso 2: Transiciï¿½n con zoom de 2 segundos
         if (localPlayerCamera != null && mainCamera != null)
         {
             Camera playerCamera = localPlayerCamera.GetPlayerCamera();
@@ -97,7 +87,7 @@ public class CameraSequenceManager : MonoBehaviour
                 Vector3 mainCameraStartPos = mainCamera.transform.position;
                 Vector3 playerCameraTargetPos = localPlayer.transform.position;
                 
-                // Ajustar la posición objetivo de la cámara del jugador
+                // Ajustar la posiciï¿½n objetivo de la cï¿½mara del jugador
                 if (playerCamera != null)
                 {
                     playerCameraTargetPos = playerCamera.transform.position;
@@ -109,21 +99,21 @@ public class CameraSequenceManager : MonoBehaviour
 
                 float elapsed = 0f;
 
-                // Solo mantener Main Camera activa durante la transición
+                // Solo mantener Main Camera activa durante la transiciï¿½n
                 mainCamera.enabled = true;
                 if (playerCamera != null)
                 {
                     playerCamera.enabled = false;
                 }
 
-                // Realizar la transición de zoom y movimiento
+                // Perform zoom and movement transition
                 while (elapsed < transitionDuration)
                 {
                     elapsed += Time.deltaTime;
                     float t = elapsed / transitionDuration;
                     float curveValue = transitionCurve.Evaluate(t);
 
-                    // Interpolar posición hacia el jugador
+                    // Interpolar posiciï¿½n hacia el jugador
                     mainCamera.transform.position = Vector3.Lerp(
                         mainCameraStartPos,
                         playerCameraTargetPos,
@@ -144,10 +134,10 @@ public class CameraSequenceManager : MonoBehaviour
                 mainCamera.transform.position = playerCameraTargetPos;
                 mainCamera.orthographicSize = targetSize;
 
-                // Pequeña pausa antes del cambio final
+                // Brief pause before final switch
                 yield return new WaitForSeconds(0.1f);
 
-                // Paso 3: Cambiar a la cámara del jugador
+                // Paso 3: Cambiar a la cï¿½mara del jugador
                 mainCamera.enabled = false;
                 
                 if (playerCamera != null)
@@ -155,21 +145,20 @@ public class CameraSequenceManager : MonoBehaviour
                     playerCamera.enabled = true;
                 }
 
-                // Notificar al PlayerCameraController que ya puede usar su cámara
+                // Notify PlayerCameraController that the player camera can be used
                 localPlayerCamera.SetCameraActive(true);
                 localPlayerCamera.SetUsePlayerCamera(true);
 
-                // Restaurar el tamaño original de la Main Camera para futuras transiciones
+                // Restore original main camera size and position for future transitions
                 mainCamera.orthographicSize = mainCameraStartSize;
                 mainCamera.transform.position = mainCameraStartPos;
-
-                Debug.Log("[CameraSequenceManager] Transition complete - Player Camera active");
+                // Transition complete; no runtime log
             }
         }
     }
 
     /// <summary>
-    /// Forzar el cambio a Main Camera (llamado cuando alguien toca la puerta con la llave)
+    /// Force switching back to the main camera (called when a door is interacted with using the key)
     /// </summary>
     public void SwitchToMainCamera()
     {
@@ -190,6 +179,6 @@ public class CameraSequenceManager : MonoBehaviour
             localPlayerCamera.SetCameraActive(false);
         }
 
-        Debug.Log("[CameraSequenceManager] Forced switch to Main Camera");
+        // Forced switch to main camera; no runtime log
     }
 }

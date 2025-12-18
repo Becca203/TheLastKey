@@ -30,6 +30,6 @@ public class KeyBehaviour : MonoBehaviour
     {
         isCollected = false;
         gameObject.SetActive(true);
-        Debug.Log("[KeyBehaviour] Key shown again (server rejected collection)");
+        // Key shown again (server rejected collection) - no runtime log
     }
 }

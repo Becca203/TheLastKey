@@ -13,13 +13,11 @@ public class DoorTrigger : MonoBehaviour
     private void Start()
     {
         transitionUI = FindAnyObjectByType<LevelTransitionUI>();
-        if (transitionUI == null) 
-            Debug.LogError("LevelTransitionUI not found in the scene.");
+        if (transitionUI == null) {}
 
         if (string.IsNullOrEmpty(nextLevelName))
         {
             nextLevelName = GetNextLevelName();
-            Debug.Log($"[DoorTrigger] Auto-detected next level: {nextLevelName}");
         }
     }
 
@@ -33,7 +31,7 @@ public class DoorTrigger : MonoBehaviour
             
             if (networkPlayer != null && networkPlayer.hasKey)
             {
-                Debug.Log("Player " + networkPlayer.playerID + " reached the door with the key!");
+                // Player reached the door with the key - no runtime log
 
                 levelCompleted = true;
 
@@ -48,16 +46,13 @@ public class DoorTrigger : MonoBehaviour
                 if (transitionUI != null)
                     transitionUI.ShowPanel();
             }
-            else if (networkPlayer != null && !networkPlayer.hasKey)
-            {
-                Debug.Log("Player " + networkPlayer.playerID + " doesn't have the key!");
-            }
+            else if (networkPlayer != null && !networkPlayer.hasKey) {}
         }
     }
 
     private void SwitchAllPlayersToMainCamera()
     {
-        Debug.Log("[DoorTrigger] Switching all players to Main Camera");
+    // Switching all players to Main Camera
 
         // Buscar todos los jugadores y cambiar sus cámaras
         NetworkPlayer[] allPlayers = FindObjectsByType<NetworkPlayer>(FindObjectsSortMode.None);
@@ -65,11 +60,10 @@ public class DoorTrigger : MonoBehaviour
         foreach (NetworkPlayer player in allPlayers)
         {
             PlayerCameraController cameraController = player.GetComponent<PlayerCameraController>();
-            if (cameraController != null)
-            {
-                cameraController.ForceMainCamera();
-                Debug.Log($"[DoorTrigger] Switched Player {player.playerID} to Main Camera");
-            }
+                if (cameraController != null)
+                {
+                    cameraController.ForceMainCamera();
+                }
         }
 
         // También notificar al CameraSequenceManager si existe
@@ -92,7 +86,6 @@ public class DoorTrigger : MonoBehaviour
             if (data != null)
             {
                 clientNetworking.SendBytes(data);
-                Debug.Log("[DoorTrigger] Sent CAMERA_SWITCH message to other player");
             }
         }
         else
@@ -110,16 +103,12 @@ public class DoorTrigger : MonoBehaviour
             SimpleMessage completeMsg = new SimpleMessage("LEVEL_COMPLETE", nextLevelName);
             byte[] data = NetworkSerializer.Serialize(completeMsg);
 
-            if (data != null)
-            {
-                clientNetworking.SendBytesReliable(data, "LEVEL_COMPLETE");
-                Debug.Log($"[DoorTrigger] Sent LEVEL_COMPLETE message for next level: {nextLevelName}");
-            }
+                if (data != null)
+                {
+                    clientNetworking.SendBytesReliable(data, "LEVEL_COMPLETE");
+                }
         }
-        else
-        {
-            Debug.LogError("[DoorTrigger] Client Networking not found!");
-        }
+        else {}
     }
 
     private Networking FindClientNetworking()
@@ -149,7 +138,6 @@ public class DoorTrigger : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning("[DoorTrigger] No next level found in build settings!");
             return "MainMenu";
         }
     }

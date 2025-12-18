@@ -20,14 +20,14 @@ public class KeyAuraEffect : MonoBehaviour
 
         if (mainSprite == null)
         {
-            Debug.LogError("KeyAuraEffect: No se encontró SpriteRenderer en este GameObject!");
+            // Missing main SpriteRenderer - disable effect
             enabled = false;
             return;
         }
 
         if (playerSprite == null)
         {
-            Debug.LogError("KeyAuraEffect: No se encontró SpriteRenderer del jugador en el padre!");
+            // Missing player SpriteRenderer in parent - disable effect
             enabled = false;
             return;
         }

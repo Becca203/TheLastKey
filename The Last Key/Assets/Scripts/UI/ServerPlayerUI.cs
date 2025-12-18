@@ -52,9 +52,9 @@ public class ServerPlayerUI : MonoBehaviour
                 }
             }
         }
-        catch (System.Exception e)
+        catch (System.Exception)
         {
-            Debug.LogError($"[ServerPlayerUI] Error getting IP: {e.Message}");
+            // Error getting IP - suppressed runtime log
         }
 
         return "127.0.0.1";

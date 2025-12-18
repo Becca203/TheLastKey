@@ -12,9 +12,9 @@ public static class NetworkSerializer
             string json = JsonUtility.ToJson(message);
             return Encoding.UTF8.GetBytes(json);
         }
-        catch (Exception e)
+        catch (Exception)
         {
-            Debug.LogError("Error serializing " + typeof(T).Name + ": " + e.Message);
+            // Error serializing message; suppressed runtime log
             return null;
         }
     }
@@ -27,9 +27,9 @@ public static class NetworkSerializer
             string json = Encoding.UTF8.GetString(data, 0, length);
             return JsonUtility.FromJson<T>(json);
         }
-        catch (Exception e)
+        catch (Exception)
         {
-            Debug.LogError("Error deserializing to " + typeof(T).Name + ": " + e.Message);
+            // Error deserializing message; suppressed runtime log
             return null;
         }
     }
@@ -57,9 +57,9 @@ public static class NetworkSerializer
             string json = JsonUtility.ToJson(packet);
             return Encoding.UTF8.GetBytes(json);
         }
-        catch (Exception e)
+        catch (Exception)
         {
-            Debug.LogError("Error serializing ReliablePacket: " + e.Message);
+            // Error serializing reliable packet; suppressed runtime log
             return null;
         }
     }
@@ -71,9 +71,9 @@ public static class NetworkSerializer
             string json = Encoding.UTF8.GetString(data, 0, length);
             return JsonUtility.FromJson<ReliablePacket>(json);
         }
-        catch (Exception e)
+        catch (Exception)
         {
-            Debug.LogError("Error deserializing ReliablePacket: " + e.Message);
+            // Error deserializing reliable packet; suppressed runtime log
             return null;
         }
     }

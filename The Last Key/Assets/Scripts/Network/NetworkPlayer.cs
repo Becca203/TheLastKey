@@ -50,21 +50,18 @@ public class NetworkPlayer : MonoBehaviour
             if (net.mode == Networking.NetworkMode.Client)
             {
                 networking = net;
-                Debug.Log($"[NetworkPlayer {playerID}] Found Client Networking component");
                 break;
             }
         }
 
         if (networking == null)
         {
-            Debug.LogError($"[NetworkPlayer {playerID}] Client Networking not found!");
         }
 
         playerMovement = GetComponent<PlayerMovement2D>();
 
         if (playerMovement == null)
         {
-            Debug.LogWarning("PlayerMovement2D component not found!");
         }
 
         targetPosition = transform.position;
@@ -186,7 +183,6 @@ public class NetworkPlayer : MonoBehaviour
     {
         if (isPushed)
         {
-            Debug.Log($"[NetworkPlayer] Ignoring position update for pushed player {playerID}");
             return;
         }
 
@@ -209,7 +205,7 @@ public class NetworkPlayer : MonoBehaviour
         if (playerMovement != null)
         {
             playerMovement.SetHasKey(value);
-            Debug.Log($"[NetworkPlayer] Player {playerID} hasKey changed from {previousValue} to {value}");
+                // Player hasKey updated; no runtime log
         }
     }
 
@@ -225,7 +221,7 @@ public class NetworkPlayer : MonoBehaviour
     {
         if (!isLocalPlayer) return;
 
-        Debug.Log($"[NetworkPlayer] Player {playerID} stealing key from Player {targetPlayerID}");
+            // Steal key action initiated; no runtime log
         SendKeyTransferMessage(targetPlayerID, playerID);
     }
 
@@ -249,14 +245,13 @@ public class NetworkPlayer : MonoBehaviour
             rb.linearVelocity = velocity;
         }
         
-        Debug.Log($"[NetworkPlayer] Player {playerID} START PUSH with velocity {velocity} for {duration}s (isLocal: {isLocalPlayer}, position: {transform.position})");
+            // Start push initiated; no runtime log
     }
 
     private void SendKeyCollectedMessage()
     {
         if (networking == null)
         {
-            Debug.LogError("Networking not found!");
             return;
         }
 
@@ -266,7 +261,6 @@ public class NetworkPlayer : MonoBehaviour
         if (data != null)
         {
             networking.SendBytesReliable(data, "KEY_COLLECTED");
-            Debug.Log($"[NetworkPlayer] KEY_COLLECTED message sent for Player {playerID}");
         }
     }
 
@@ -274,7 +268,6 @@ public class NetworkPlayer : MonoBehaviour
     {
         if (networking == null)
         {
-            Debug.LogError("Networking not found!");
             return;
         }
 
@@ -284,7 +277,6 @@ public class NetworkPlayer : MonoBehaviour
         if (data != null)
         {
             networking.SendBytesReliable(data, "KEY_TRANSFER");
-            Debug.Log($"[NetworkPlayer] KEY_TRANSFER sent: from Player {fromPlayer} to Player {toPlayer}");
         }
     }
 

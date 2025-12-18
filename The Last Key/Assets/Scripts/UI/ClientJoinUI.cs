@@ -32,7 +32,6 @@ public class ClientJoinUI : MonoBehaviour
             NetworkManager networkManager = NetworkManager.Instance;
             if (networkManager != null)
             {
-                // Check if connection failed
                 if (networkManager.IsConnectionFailed())
                 {
                     isConnecting = false;
@@ -47,16 +46,9 @@ public class ClientJoinUI : MonoBehaviour
                         joinButton.interactable = true;
                     }
                 }
-                // Check if connected successfully (networking exists and not failed)
-                else if (networkManager.GetNetworking() != null && 
-                         !networkManager.IsConnectionFailed())
+                else if (networkManager.GetNetworking() != null && !networkManager.IsConnectionFailed())
                 {
-                    // Connection is active
-                    if (statusText != null && statusText.text == "Connecting...")
-                    {
-                        // Keep showing "Connecting..." until we get to WaitingRoom
-                        // The scene change will happen automatically from Networking.cs
-                    }
+                    if (statusText != null && statusText.text == "Connecting...") {}
                 }
             }
         }
@@ -68,7 +60,6 @@ public class ClientJoinUI : MonoBehaviour
         
         if (networkManager == null)
         {
-            Debug.LogError("[ClientJoinUI] NetworkManager not found!");
             if (statusText != null)
             {
                 statusText.text = "Error: NetworkManager not found!";
@@ -101,9 +92,7 @@ public class ClientJoinUI : MonoBehaviour
             username = "Player";
         }
 
-        Debug.Log($"[ClientJoinUI] Attempting to connect to {targetIP} with username {username}");
-
-        // CORREGIDO: El orden de parámetros es (username, targetIP)
+        // Attempting to connect; no runtime log
         networkManager.StartAsClient(username, targetIP);
         isConnecting = true;
     }
